@@ -663,7 +663,7 @@ html.snap{scroll-snap-type:y mandatory}
   .frame-sub{margin-bottom:.8rem}
   .square.frame .wall-grid{width:100%}
   .wallets.frame #wallet-svg{max-height:26svh}
-  .sim-section.frame #sim-canvas{height:27svh}
+  .sim-section.frame #sim-canvas{height:23svh}
   .sim-section.frame .sim-status{font-size:1.3rem}
 }
 .swap-section.frame .swap{width:min(100%,calc((100svh - 380px) * .5625),430px)}
