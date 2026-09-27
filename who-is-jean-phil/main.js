@@ -4,7 +4,8 @@ import {parseQuote, parseHistory, selectPeriod, chartGeometry, QUOTE_URL, HISTOR
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-const state = {autoplay: !reduced, sound: false};
+// Sound defaults to on, but browsers only allow it after the reader's first tap or key press (see unlockSound).
+const state = {autoplay: !reduced, sound: true, unlocked: false};
 const swap = {under: document.querySelector('#swap-under'), over: document.querySelector('#swap-over'), playing: false, inView: false, userPaused: false};
 
 /* ---------------- Masthead: solid bar, progress, current reel ---------------- */
@@ -49,8 +50,18 @@ function applySound() {
   const lead = swap.playing && swap.inView ? swap.under : primaryVideo();
   for (const v of [...autoVideos, swap.under, swap.over]) {
     if (!v) continue;
-    v.muted = !(state.sound && v === lead);
+    v.muted = !(state.sound && state.unlocked && v.dataset.primed && v === lead);
   }
+}
+// iOS pauses a video that gets unmuted outside a tap, and refuses to play it unmuted.
+// If that happens, fall back to muted playback instead of leaving it stopped.
+function playSafely(v) {
+  return v.play().catch(err => {
+    if (err.name !== 'NotAllowedError' || v.muted) return;
+    delete v.dataset.primed;
+    v.muted = true;
+    v.play().catch(() => {});
+  });
 }
 function updateVideos() {
   const lead = primaryVideo();
@@ -58,7 +69,7 @@ function updateVideos() {
     const shouldPlay = state.autoplay && v === lead;
     if (shouldPlay) {
       if (v.preload === 'none') v.preload = 'auto';
-      if (v.paused && !v.dataset.userPaused) v.play().catch(() => {});
+      if (v.paused && !v.dataset.userPaused) playSafely(v);
     } else if (!v.paused && v !== lead) {
       v.pause();
     }
@@ -72,7 +83,8 @@ const videoIO = new IntersectionObserver(entries => {
 autoVideos.forEach(v => {
   videoIO.observe(v);
   v.addEventListener('click', () => {
-    if (v.paused) { delete v.dataset.userPaused; v.play().catch(() => {}); }
+    if (justUnlocked) return;
+    if (v.paused) { delete v.dataset.userPaused; playSafely(v); }
     else { v.dataset.userPaused = '1'; v.pause(); }
   });
 });
@@ -83,16 +95,59 @@ const preloadIO = new IntersectionObserver(entries => {
 autoVideos.forEach(v => preloadIO.observe(v));
 
 const soundBtn = $('#sound-toggle'), motionBtn = $('#motion-toggle');
+function renderSound() {
+  soundBtn.setAttribute('aria-pressed', state.sound && state.unlocked);
+  soundBtn.classList.toggle('waiting', state.sound && !state.unlocked);
+  $('.label', soundBtn).textContent = !state.sound ? 'Sound off' : state.unlocked ? 'Sound on' : 'Tap for sound';
+}
+// Called inside a tap or key press. Playing each video once, unmuted, while the gesture is live
+// is what lets it play with sound later, when scrolling brings it on screen.
+let justUnlocked = false;
+function unlockSound() {
+  if (state.unlocked) return;
+  const all = [...autoVideos, swap.under, swap.over].filter(Boolean);
+  const tries = all.map(v => {
+    const wasPaused = v.paused, wasMuted = v.muted;
+    v.dataset.primed = '1';
+    v.muted = false;
+    const p = v.play();
+    if (wasPaused) v.pause();
+    v.muted = wasMuted;
+    return p.then(() => true, err => err.name !== 'NotAllowedError').then(ok => { if (!ok) delete v.dataset.primed; return ok; });
+  });
+  state.unlocked = true;
+  justUnlocked = true;
+  setTimeout(() => { justUnlocked = false; }, 0);
+  renderSound();
+  applySound();
+  Promise.all(tries).then(results => {
+    if (results.some(Boolean)) return;
+    state.unlocked = false;
+    renderSound();
+    applySound();
+  });
+}
+function onFirstGesture(e) {
+  if (e.type === 'keydown' && (e.key === 'Tab' || e.key === 'Escape' || e.metaKey || e.ctrlKey)) return;
+  if (state.sound) unlockSound();
+}
+// iOS only sends taps on plain text to listeners attached below <body>, so listen on the page's regions too.
+for (const target of [document, $('main'), masthead]) {
+  target.addEventListener('click', onFirstGesture, {capture: true});
+}
+document.addEventListener('keydown', onFirstGesture, {capture: true});
 soundBtn.addEventListener('click', () => {
-  state.sound = !state.sound;
-  soundBtn.setAttribute('aria-pressed', state.sound);
-  $('.label', soundBtn).textContent = state.sound ? 'Sound on' : 'Sound off';
+  if (justUnlocked) return;
+  state.sound = !(state.sound && state.unlocked);
+  if (state.sound && !state.unlocked) { unlockSound(); return; }
+  renderSound();
   if (state.sound) {
     const lead = swap.playing && swap.inView ? swap.under : primaryVideo();
-    if (lead && lead.paused) lead.play().catch(() => {});
+    if (lead && lead.paused) playSafely(lead);
   }
   applySound();
 });
+renderSound();
 function setAutoplay(on) {
   state.autoplay = on;
   motionBtn.setAttribute('aria-pressed', on);
@@ -156,7 +211,8 @@ function setLevel(scene, level) {
 
 /* ---------------- Evidence dialog ---------------- */
 const dialog = $('#exhibit');
-$$('[data-exhibit]').forEach(btn => btn.addEventListener('click', () => {
+$$('[data-exhibit]').forEach(btn => btn.addEventListener('click', e => {
+  e.preventDefault();
   $('#exhibit-img').src = btn.dataset.exhibit;
   $('#exhibit-img').alt = btn.dataset.caption || 'Evidence';
   $('#exhibit-cap').textContent = btn.dataset.caption || '';
