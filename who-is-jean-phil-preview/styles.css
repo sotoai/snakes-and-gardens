@@ -701,3 +701,5 @@ html.snap{scroll-snap-type:y mandatory}
 .sound-cta{position:absolute;z-index:6;left:50%;top:30%;transform:translate(-50%,-50%);display:flex;align-items:center;gap:10px;background:var(--red);color:#fff;border:0;border-radius:999px;padding:13px 22px;font-size:.78rem;letter-spacing:.16em;text-transform:uppercase;box-shadow:0 12px 36px rgba(0,0,0,.45);cursor:pointer}
 .sound-cta::before{content:"";width:9px;height:9px;border-radius:50%;background:#fff;animation:sound-wait 1.6s ease-in-out infinite}
 .sound-cta[hidden]{display:none}
+
+.stage-media:not(.is-active){pointer-events:none}

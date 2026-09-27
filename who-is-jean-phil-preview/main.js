@@ -5,7 +5,7 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 // Sound defaults to on, but browsers only allow it after the reader's first tap or key press (see unlockSound).
-const state = {autoplay: !reduced, sound: true, unlocked: false};
+const state = {autoplay: !reduced, sound: true, unlocked: false, refused: false};
 const swap = {under: document.querySelector('#swap-under'), over: document.querySelector('#swap-over'), playing: false, inView: false, userPaused: false};
 
 /* ---------------- Masthead: solid bar, progress, current reel ---------------- */
@@ -78,11 +78,14 @@ function probeSound(v) {
     for (const x of [...autoVideos, swap.under, swap.over]) if (x) x.dataset.primed = '1';
     renderSound();
     applySound();
-  }, () => {
+  }, err => {
     delete v.dataset.probing;
     v.muted = true;
-    v.play().catch(() => {});
+    // Paused or failed to load before it could start: that isn't a refusal, so try again on the next play.
+    if (err.name !== 'NotAllowedError') { probed = false; applySound(); return; }
+    state.refused = true;
     renderSound();
+    if (state.autoplay && v === primaryVideo() && !v.dataset.userPaused) v.play().catch(() => {});
   });
 }
 function playSafely(v) {
@@ -114,7 +117,7 @@ const videoIO = new IntersectionObserver(entries => {
 autoVideos.forEach(v => {
   videoIO.observe(v);
   v.addEventListener('click', () => {
-    if (justUnlocked) return;
+    if (justUnlocked() && !v.paused) return;
     if (v.paused) { delete v.dataset.userPaused; playSafely(v); }
     else { v.dataset.userPaused = '1'; v.pause(); }
   });
@@ -131,11 +134,12 @@ function renderSound() {
   soundBtn.classList.toggle('waiting', state.sound && !state.unlocked);
   $('.label', soundBtn).textContent = !state.sound ? 'Sound off' : state.unlocked ? 'Sound on' : 'Tap for sound';
   const cta = $('#sound-cta');
-  if (cta) cta.hidden = !(state.sound && !state.unlocked);
+  if (cta) cta.hidden = !(state.sound && !state.unlocked && (state.refused || !state.autoplay));
 }
 // Called inside a tap or key press. Playing each video once, unmuted, while the gesture is live
 // is what lets it play with sound later, when scrolling brings it on screen.
-let justUnlocked = false;
+let unlockedAt = -Infinity;
+const justUnlocked = () => performance.now() - unlockedAt < 700;
 function unlockSound() {
   if (state.unlocked) return;
   const all = [...autoVideos, swap.under, swap.over].filter(Boolean);
@@ -149,10 +153,11 @@ function unlockSound() {
     return p.then(() => true, err => err.name !== 'NotAllowedError').then(ok => { if (!ok) delete v.dataset.primed; return ok; });
   });
   state.unlocked = true;
-  justUnlocked = true;
-  setTimeout(() => { justUnlocked = false; }, 0);
+  unlockedAt = performance.now();
   renderSound();
-  applySound();
+  // Start whatever should be playing now, while the gesture is still live (Low Power Mode blocks even muted autoplay).
+  updateVideos();
+  swap.resume?.();
   Promise.all(tries).then(results => {
     if (results.some(Boolean)) return;
     state.unlocked = false;
@@ -160,8 +165,12 @@ function unlockSound() {
     applySound();
   });
 }
+const NOT_GESTURES = ['Tab', 'Escape', 'Shift', 'Alt', 'AltGraph', 'Control', 'Meta', 'CapsLock', 'Fn', 'NumLock', 'ScrollLock'];
 function onFirstGesture(e) {
-  if (e.type === 'keydown' && (e.key === 'Tab' || e.key === 'Escape' || e.metaKey || e.ctrlKey)) return;
+  if (e.type === 'keydown') {
+    if (soundBtn.contains(e.target) || NOT_GESTURES.includes(e.key) || e.metaKey || e.ctrlKey) return;
+    if (navigator.userActivation && !navigator.userActivation.isActive) return;
+  }
   if (state.sound) unlockSound();
 }
 // iOS only sends taps on plain text to listeners attached below <body>, so listen on the page's regions too.
@@ -169,8 +178,13 @@ for (const target of [document, $('main'), masthead]) {
   target.addEventListener('click', onFirstGesture, {capture: true});
 }
 document.addEventListener('keydown', onFirstGesture, {capture: true});
+for (const target of [document, $('main'), masthead]) {
+  target.addEventListener('pointerup', e => {
+    if (e.pointerType !== 'mouse' && navigator.userActivation?.isActive) onFirstGesture(e);
+  }, {capture: true});
+}
 soundBtn.addEventListener('click', () => {
-  if (justUnlocked) return;
+  if (justUnlocked()) return;
   state.sound = !(state.sound && state.unlocked);
   if (state.sound && !state.unlocked) { unlockSound(); return; }
   renderSound();
@@ -180,18 +194,38 @@ soundBtn.addEventListener('click', () => {
   }
   applySound();
 });
+$('#sound-cta')?.addEventListener('click', () => {
+  const v = primaryVideo();
+  if (v && v.paused) { delete v.dataset.userPaused; playSafely(v); }
+});
 renderSound();
 function setAutoplay(on) {
   state.autoplay = on;
   motionBtn.setAttribute('aria-pressed', on);
   $('.label', motionBtn).textContent = on ? 'Autoplay on' : 'Autoplay off';
-  if (!on) autoVideos.forEach(v => v.pause());
+  if (!on) { autoVideos.forEach(v => v.pause()); swap.stop?.(); }
   updateVideos();
+  renderSound();
 }
 motionBtn.addEventListener('click', () => setAutoplay(!state.autoplay));
 setAutoplay(state.autoplay);
 // Browsers may pause muted videos while a tab or pane is hidden; resume the lead video when it's visible again.
-document.addEventListener('visibilitychange', () => { if (!document.hidden) updateVideos(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { autoVideos.forEach(v => { if (!v.paused) v.pause(); }); swap.stop?.(); return; }
+  updateVideos();
+  swap.resume?.();
+});
+// Hardware media keys and the OS media controls pause for real, instead of being undone by the next tick.
+if ('mediaSession' in navigator) {
+  navigator.mediaSession.setActionHandler('pause', () => {
+    autoVideos.forEach(v => { if (!v.paused) { v.dataset.userPaused = '1'; v.pause(); } });
+    if (swap.playing) { swap.userPaused = true; swap.stop?.(); }
+  });
+  navigator.mediaSession.setActionHandler('play', () => {
+    const l = primaryVideo();
+    if (l) { delete l.dataset.userPaused; playSafely(l); }
+  });
+}
 setInterval(() => { if (!document.hidden) updateVideos(); }, 2500);
 
 /* ---------------- Scrolly scenes ---------------- */
@@ -340,10 +374,14 @@ dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close();
     if (Math.abs(d) > .12) swap.over.currentTime = swap.under.currentTime;
     raf = requestAnimationFrame(sync);
   }
-  async function play() {
+  let starting = false;
+  async function play(auto) {
+    if (starting) return;
+    starting = true;
     for (const v of [swap.under, swap.over]) if (v.preload === 'none') { v.preload = 'auto'; v.load(); }
     swap.over.currentTime = swap.under.currentTime;
-    try { await Promise.all([swap.under.play(), swap.over.play()]); } catch { return; }
+    try { await Promise.all([swap.under.play(), swap.over.play()]); } catch { return; } finally { starting = false; }
+    if (auto && !swap.inView) { swap.under.pause(); swap.over.pause(); return; }
     swap.playing = true; btn.textContent = '❚❚ Pause'; btn.setAttribute('aria-pressed', 'true');
     applySound(); cancelAnimationFrame(raf); sync();
   }
@@ -351,12 +389,16 @@ dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close();
     swap.under.pause(); swap.over.pause(); swap.playing = false; cancelAnimationFrame(raf);
     btn.textContent = '▶ Play both'; btn.setAttribute('aria-pressed', 'false'); applySound();
   }
-  btn.addEventListener('click', () => swap.playing ? pause() : play());
+  btn.addEventListener('click', () => {
+    if (swap.playing) { swap.userPaused = true; pause(); } else { swap.userPaused = false; play(); }
+  });
+  swap.stop = pause;
+  swap.resume = () => { if (swap.inView && state.autoplay && !swap.playing && !swap.userPaused) play(true); };
   swap.under.addEventListener('seeked', () => { swap.over.currentTime = swap.under.currentTime; });
   new IntersectionObserver(([e]) => {
     swap.inView = e.isIntersecting && e.intersectionRatio > .4;
     if (swap.inView) {
-      if (state.autoplay && !swap.playing && !swap.userPaused) play();
+      if (state.autoplay && !swap.playing && !swap.userPaused) play(true);
       if (!hinted && !reduced) {
         hinted = true;
         const t0 = performance.now();
@@ -366,7 +408,6 @@ dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close();
     } else if (swap.playing) pause();
     applySound();
   }, {threshold: [0, .4, .8]}).observe(frame);
-  btn.addEventListener('click', () => { swap.userPaused = !swap.playing; });
 })();
 
 /* ---------------- Shared data (market snapshot + token births) ---------------- */
