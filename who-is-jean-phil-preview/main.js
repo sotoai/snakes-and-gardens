@@ -293,13 +293,14 @@ dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close();
   const grid = $('#wall-grid'); if (!grid || !data.length) return;
   const filtersEl = $('#wall-filters');
   const LENSES = {
+    x: {key: 'x', order: {f: 0, q: 1, w: 2, m: 3, o: 4}, cats: [['f', 'Laughed, tagged, passed it on', 'x-f'], ['q', 'Argued: real or AI?', 'x-q'], ['w', 'Worried what\u2019s real', 'x-w'], ['m', 'Followed the money', 'x-m'], ['o', 'Everything else', 'x-o']]},
     r: {key: 'r', order: {d: 0, a: 1, n: 2}, cats: [['d', 'Delight', 'r-d'], ['a', 'Alarm', 'r-a'], ['n', 'Neither', 'r-n']]},
     s: {key: 's', order: {a: 0, r: 1, m: 2, q: 3, n: 4}, cats: [['a', 'Said AI', 's-a'], ['r', 'Said real', 's-r'], ['m', 'Remake or wig', 's-m'], ['q', 'Just asked', 's-q'], ['n', "Didn't say", 's-n']]},
   };
-  const reactionLabel = {d: 'Delight', a: 'Alarm', n: 'Neither delight nor alarm'};
+  const didLabel = {f: 'passed it on', q: 'argued real or AI', w: 'worried what\u2019s real', m: 'followed the money', o: ''};
   const stanceLabel = {a: 'said it was AI', r: 'said it was real', m: 'called it a remake, a skit or a wig', q: 'just asked', n: 'took no position'};
   const modeLabel = {qu: 'quoted the video', re: 'a remark', im: 'posted an image', em: 'emoji', ta: 'tagged someone', cl: ''};
-  let lens = LENSES.r, filter = 'all', items = [], selected = null;
+  let lens = LENSES.x, filter = 'all', items = [], selected = null;
   function build() {
     items = data.map((c, i) => ({...c, i})).sort((x, y) => (lens.order[x[lens.key]] ?? 9) - (lens.order[y[lens.key]] ?? 9) || x.i - y.i);
     const cls = Object.fromEntries(lens.cats.map(([k, , c]) => [k, c]));
@@ -323,7 +324,7 @@ dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close();
     const c = items[k]; if (!c) return;
     selected?.classList.remove('sel');
     selected = grid.children[k]; selected?.classList.add('sel');
-    const bits = [reactionLabel[c.r] || '', stanceLabel[c.s] || ''];
+    const bits = [didLabel[c.x] || '', stanceLabel[c.s] || ''];
     if (c.s === 'a' && c.c === 'i') bits[1] += ' (implied)';
     if (c.s === 'n' && modeLabel[c.m]) bits.push(modeLabel[c.m]);
     bits.push(c.l === 'r' ? 'a reply' : 'a comment');

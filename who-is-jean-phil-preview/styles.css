@@ -704,3 +704,13 @@ html.snap{scroll-snap-type:y mandatory}
 
 .stage-media:not(.is-active){pointer-events:none}
 .credit-chip--cold{z-index:4;margin:0}
+
+/* Comment wall: "What they did with it" */
+.wall-grid i.x-f{background:var(--blond)}.wall-grid i.x-q{background:var(--steel)}.wall-grid i.x-w{background:var(--red)}.wall-grid i.x-m{background:var(--garden)}.wall-grid i.x-o{background:rgba(20,19,18,.12)}
+.sw.x-f{background:var(--blond)}.sw.x-q{background:var(--steel)}.sw.x-w{background:var(--red)}.sw.x-m{background:var(--garden)}.sw.x-o{background:rgba(20,19,18,.18)}
+/* Inline credit links: visible but quiet */
+a.xref{color:inherit;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:.18em;text-decoration-color:rgba(232,205,140,.55)}
+.slide--paper a.xref,.square a.xref,.slide--red a.xref{text-decoration-color:rgba(20,19,18,.45)}
+a.xref:hover{text-decoration-color:currentColor}
+.paper-card--authors a{color:inherit;text-decoration:none;border-bottom:1px solid rgba(27,26,23,.25)}
+.paper-card--authors b a{border-bottom:0}
