@@ -29,7 +29,7 @@ onScroll();
 const revealIO = new IntersectionObserver(entries => {
   for (const e of entries) if (e.isIntersecting) { e.target.classList.add('in'); revealIO.unobserve(e.target); }
 }, {threshold: .25});
-$$('.reel-card, .reach, .offspring, .poles, .four--blank').forEach(el => revealIO.observe(el));
+$$('.reel-card, .reach, .offspring, .poles, .four--blank, .slide--tako').forEach(el => revealIO.observe(el));
 
 /* ---------------- Snapping: one frame per swipe for the story; the notes scroll freely ---------------- */
 const root = document.documentElement;
@@ -58,13 +58,35 @@ function primaryVideo() {
 function applySound() {
   const lead = swap.playing && swap.inView ? swap.under : primaryVideo();
   for (const v of [...autoVideos, swap.under, swap.over]) {
-    if (!v) continue;
+    if (!v || v.dataset.probing) continue;
     v.muted = !(state.sound && state.unlocked && v.dataset.primed && v === lead);
   }
 }
 // iOS pauses a video that gets unmuted outside a tap, and refuses to play it unmuted.
 // If that happens, fall back to muted playback instead of leaving it stopped.
+// Sound is on by default. Where the browser allows sound without a tap (some in-app browsers, or a desktop
+// browser the reader has used here before), the first video simply starts with sound. Otherwise it plays
+// muted, and the first tap anywhere turns sound on (see unlockSound).
+let probed = false;
+function probeSound(v) {
+  probed = true;
+  v.dataset.probing = '1';
+  v.muted = false;
+  return v.play().then(() => {
+    delete v.dataset.probing;
+    state.unlocked = true;
+    for (const x of [...autoVideos, swap.under, swap.over]) if (x) x.dataset.primed = '1';
+    renderSound();
+    applySound();
+  }, () => {
+    delete v.dataset.probing;
+    v.muted = true;
+    v.play().catch(() => {});
+    renderSound();
+  });
+}
 function playSafely(v) {
+  if (!probed && state.sound && !state.unlocked) return probeSound(v);
   return v.play().catch(err => {
     if (err.name !== 'NotAllowedError' || v.muted) return;
     delete v.dataset.primed;
@@ -108,6 +130,8 @@ function renderSound() {
   soundBtn.setAttribute('aria-pressed', state.sound && state.unlocked);
   soundBtn.classList.toggle('waiting', state.sound && !state.unlocked);
   $('.label', soundBtn).textContent = !state.sound ? 'Sound off' : state.unlocked ? 'Sound on' : 'Tap for sound';
+  const cta = $('#sound-cta');
+  if (cta) cta.hidden = !(state.sound && !state.unlocked);
 }
 // Called inside a tap or key press. Playing each video once, unmuted, while the gesture is live
 // is what lets it play with sound later, when scrolling brings it on screen.

@@ -669,3 +669,35 @@ html.snap{scroll-snap-type:y mandatory}
 .swap-section.frame .swap{width:min(100%,calc((100svh - 380px) * .5625),430px)}
 .market.frame .market-chart svg{height:190px}
 .market.frame .market-stats{margin:1rem 0}
+/* Tako: a hand-inked comment thread, zoomed in on one exchange */
+.tako-svg{display:block;width:100%;height:auto;overflow:visible}
+.tako-svg .ink{fill:none;stroke:var(--ink-p);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1;stroke-dashoffset:1;transition:stroke-dashoffset 1.8s var(--ease)}
+.tako-svg .faint{opacity:.32}
+.tako-svg .mark{fill:none;stroke:var(--red);stroke-width:2.8;stroke-linecap:round;stroke-dasharray:1;stroke-dashoffset:1;transition:stroke-dashoffset 1s var(--ease) 1.6s}
+.tako-svg .dot{fill:var(--ink-p)}
+.tako-svg text{fill:var(--ink-p);opacity:0;transition:opacity .9s var(--ease) .7s}
+.tako-svg .t-meta{font-family:var(--mono);font-size:10.5px;fill:var(--mute-p);letter-spacing:.02em}
+.tako-svg .t-name{fill:var(--ink-p)}
+.tako-svg .t-ask{font-family:var(--display);font-size:19px}
+.tako-svg .t-reply{font-family:var(--display);font-size:16px}
+.tako-svg .t-hi{font-style:italic}
+.tako-svg .t-head{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;fill:var(--ink-p)}
+.tako-svg .t-small{font-family:var(--mono);font-size:10px;fill:var(--mute-p)}
+.in .tako-svg .ink,.in .tako-svg .mark{stroke-dashoffset:0}
+.in .tako-svg text{opacity:1}
+.slide--tako .slide-in{max-width:40rem}
+.tako-illus{display:block;text-decoration:none;color:inherit;cursor:zoom-in;max-width:400px;margin:0 auto 1.1rem}
+.tako-see{display:block;text-align:center;font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--mute-p);margin-top:.2rem}
+.slide--tako p{font-size:clamp(1.2rem,1rem + .9vw,1.7rem)}
+.slide--tako .big{font-size:clamp(1.5rem,1.1rem + 1.4vw,2.3rem)}
+@media (min-width:900px){
+  .slide--tako .slide-in{display:grid;grid-template-columns:minmax(0,400px) minmax(0,1fr);column-gap:56px;align-items:center;align-content:center;max-width:64rem}
+  .slide--tako .tako-illus{grid-column:1;grid-row:1/span 6;margin:0}
+  .slide--tako .slide-in>p{grid-column:2}
+}
+@media (max-width:860px){.slide--tako .tako-illus{max-width:330px;margin-bottom:.6rem}}
+
+/* The opening video's invitation to turn sound on, shown only while the browser is holding sound back */
+.sound-cta{position:absolute;z-index:6;left:50%;top:30%;transform:translate(-50%,-50%);display:flex;align-items:center;gap:10px;background:var(--red);color:#fff;border:0;border-radius:999px;padding:13px 22px;font-size:.78rem;letter-spacing:.16em;text-transform:uppercase;box-shadow:0 12px 36px rgba(0,0,0,.45);cursor:pointer}
+.sound-cta::before{content:"";width:9px;height:9px;border-radius:50%;background:#fff;animation:sound-wait 1.6s ease-in-out infinite}
+.sound-cta[hidden]{display:none}
