@@ -28,7 +28,7 @@ onScroll();
 const revealIO = new IntersectionObserver(entries => {
   for (const e of entries) if (e.isIntersecting) { e.target.classList.add('in'); revealIO.unobserve(e.target); }
 }, {threshold: .25});
-$$('.reel-card, .reach, .tako, .offspring, .runsheet, .poles').forEach(el => revealIO.observe(el));
+$$('.reel-card, .reach, .offspring, .poles').forEach(el => revealIO.observe(el));
 
 /* ---------------- Video manager ---------------- */
 const autoVideos = $$('video[data-auto]');
