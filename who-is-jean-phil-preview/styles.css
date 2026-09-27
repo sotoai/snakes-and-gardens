@@ -703,3 +703,4 @@ html.snap{scroll-snap-type:y mandatory}
 .sound-cta[hidden]{display:none}
 
 .stage-media:not(.is-active){pointer-events:none}
+.credit-chip--cold{z-index:4;margin:0}
