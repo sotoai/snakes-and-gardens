@@ -28,7 +28,7 @@ onScroll();
 const revealIO = new IntersectionObserver(entries => {
   for (const e of entries) if (e.isIntersecting) { e.target.classList.add('in'); revealIO.unobserve(e.target); }
 }, {threshold: .25});
-$$('.reel-card, .reach, .tako, .offspring').forEach(el => revealIO.observe(el));
+$$('.reel-card, .reach, .tako, .offspring, .runsheet, .poles').forEach(el => revealIO.observe(el));
 
 /* ---------------- Video manager ---------------- */
 const autoVideos = $$('video[data-auto]');
@@ -164,51 +164,64 @@ $$('[data-exhibit]').forEach(btn => btn.addEventListener('click', () => {
 }));
 dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close(); });
 
-/* ---------------- Comment wall ---------------- */
+/* ---------------- Comment wall: two lenses ---------------- */
 (function wall() {
   const data = (window.SG && window.SG.comments) || [];
   const grid = $('#wall-grid'); if (!grid || !data.length) return;
-  const order = {a: 0, r: 1, m: 2, q: 3, n: 4};
-  const items = data.map((c, i) => ({...c, i})).sort((x, y) => order[x.s] - order[y.s] || x.i - y.i);
-  const stanceLabel = {a: 'Said it was AI', r: 'Said it was real', m: 'Called it a remake, a skit or a wig', q: 'Just asked', n: 'Took no position'};
+  const filtersEl = $('#wall-filters');
+  const LENSES = {
+    r: {key: 'r', order: {d: 0, a: 1, n: 2}, cats: [['d', 'Delight', 'r-d'], ['a', 'Alarm', 'r-a'], ['n', 'Neither', 'r-n']]},
+    s: {key: 's', order: {a: 0, r: 1, m: 2, q: 3, n: 4}, cats: [['a', 'Said AI', 's-a'], ['r', 'Said real', 's-r'], ['m', 'Remake or wig', 's-m'], ['q', 'Just asked', 's-q'], ['n', "Didn't say", 's-n']]},
+  };
+  const reactionLabel = {d: 'Delight', a: 'Alarm', n: 'Neither delight nor alarm'};
+  const stanceLabel = {a: 'said it was AI', r: 'said it was real', m: 'called it a remake, a skit or a wig', q: 'just asked', n: 'took no position'};
   const modeLabel = {qu: 'quoted the video', re: 'a remark', im: 'posted an image', em: 'emoji', ta: 'tagged someone', cl: ''};
-  const frag = document.createDocumentFragment();
-  items.forEach((c, k) => {
-    const el = document.createElement('i');
-    el.className = `s-${c.s}`;
-    el.dataset.k = k;
-    frag.append(el);
-  });
-  grid.append(frag);
-  let selected = null;
+  let lens = LENSES.r, filter = 'all', items = [], selected = null;
+  function build() {
+    items = data.map((c, i) => ({...c, i})).sort((x, y) => (lens.order[x[lens.key]] ?? 9) - (lens.order[y[lens.key]] ?? 9) || x.i - y.i);
+    const cls = Object.fromEntries(lens.cats.map(([k, , c]) => [k, c]));
+    grid.replaceChildren(...items.map((c, k) => { const el = document.createElement('i'); el.className = cls[c[lens.key]] || ''; el.dataset.k = k; return el; }));
+    const counts = {}; items.forEach(c => counts[c[lens.key]] = (counts[c[lens.key]] || 0) + 1);
+    filtersEl.replaceChildren();
+    const mk = (k, label, c, n) => { const b = document.createElement('button'); b.type = 'button'; b.dataset.wall = k; b.setAttribute('aria-pressed', 'false');
+      b.innerHTML = (c ? `<i class="sw ${c}"></i>` : '') + `${label} <b>${n}</b>`; b.addEventListener('click', () => setFilter(k)); filtersEl.append(b); };
+    mk('all', 'All', '', items.length);
+    lens.cats.forEach(([k, label, c]) => mk(k, label, c, counts[k] || 0));
+    setFilter('all', true);
+  }
+  function setFilter(k, quiet) {
+    filter = k;
+    $$('[data-wall]', filtersEl).forEach(b => b.setAttribute('aria-pressed', b.dataset.wall === k));
+    grid.classList.toggle('filtering', k !== 'all');
+    [...grid.children].forEach((el, i) => el.classList.toggle('hit', k === 'all' || items[i][lens.key] === k));
+    if (!quiet) randomPick();
+  }
   function show(k) {
     const c = items[k]; if (!c) return;
     selected?.classList.remove('sel');
-    selected = grid.children[k]; selected.classList.add('sel');
-    const bits = [stanceLabel[c.s]];
-    if (c.s === 'a' && c.c === 'i') bits[0] += ' (implied)';
+    selected = grid.children[k]; selected?.classList.add('sel');
+    const bits = [reactionLabel[c.r] || '', stanceLabel[c.s] || ''];
+    if (c.s === 'a' && c.c === 'i') bits[1] += ' (implied)';
     if (c.s === 'n' && modeLabel[c.m]) bits.push(modeLabel[c.m]);
     bits.push(c.l === 'r' ? 'a reply' : 'a comment');
     if (c.g) bits.push(`${c.g} before capture`);
-    $('#wall-meta').textContent = bits.join(' · ');
+    $('#wall-meta').textContent = bits.filter(Boolean).join(' · ');
     $('#wall-text').textContent = c.t || '(no text)';
+  }
+  function randomPick() {
+    const pool = items.map((c, k) => k).filter(k => (filter === 'all' || items[k][lens.key] === filter) && items[k].t && !/^\[/.test(items[k].t));
+    if (pool.length) show(pool[Math.floor(Math.random() * pool.length)]);
   }
   grid.addEventListener('pointerover', e => { if (e.target.dataset.k) show(Number(e.target.dataset.k)); });
   grid.addEventListener('click', e => { if (e.target.dataset.k) show(Number(e.target.dataset.k)); });
-  let filter = 'all';
-  $$('[data-wall]').forEach(btn => btn.addEventListener('click', () => {
-    filter = btn.dataset.wall;
-    $$('[data-wall]').forEach(b => b.setAttribute('aria-pressed', b === btn));
-    grid.classList.toggle('filtering', filter !== 'all');
-    [...grid.children].forEach((el, k) => el.classList.toggle('hit', filter === 'all' || items[k].s === filter));
-    randomPick();
-  }));
-  function randomPick() {
-    const pool = items.map((c, k) => k).filter(k => (filter === 'all' || items[k].s === filter) && items[k].t && !/^\[/.test(items[k].t));
-    if (pool.length) show(pool[Math.floor(Math.random() * pool.length)]);
-  }
   $('#wall-random').addEventListener('click', randomPick);
-  const start = items.findIndex(c => /original guy/i.test(c.t));
+  const tabs = $$('.wall-lens [data-lens]');
+  tabs.forEach(t => t.addEventListener('click', () => {
+    tabs.forEach(x => x.setAttribute('aria-selected', x === t));
+    lens = LENSES[t.dataset.lens]; build(); randomPick();
+  }));
+  build();
+  const start = items.findIndex(c => /support data centers/i.test(c.t));
   show(start >= 0 ? start : 0);
 })();
 
@@ -318,7 +331,7 @@ const snapshot = fetch('assets/data/market-snapshot.json').then(r => r.json()).c
       if (!c.withheld) dot.append(Object.assign(document.createElementNS(NS, 'title'), {textContent: `${c.name || c.symbol} (${c.symbol})`}));
       seen.add(c.address || c.symbol);
     });
-    el('text', {class: 'ev-label', x: x(pdt('2026-09-21T06:00:00')), y: lanes.money + 33, fill: 'var(--blond)'}, `← ${seen.size} new tokens priced in JEANPHIL, Sept 20–27`);
+    el('text', {class: 'ev-label', x: x(pdt('2026-09-21T06:00:00')), y: lanes.money + 52, fill: 'var(--blond)'}, `← ${seen.size} new tokens priced in JEANPHIL, Sept 20–27`);
   }
   // "Now" marker
   const now = pdt('2026-09-27T08:40:00');
