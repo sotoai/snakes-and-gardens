@@ -895,3 +895,15 @@ a.xref:hover{text-decoration-color:currentColor}
   .mach-card,.mach-toggle,.mach-quote{align-self:start}
   .mach .mach-card{margin-top:clamp(2rem,10svh,6rem)}
 }
+/* keep the live-price and coin-pile frames to one screen */
+@media (max-width:600px){ .market.frame .market-chart svg{height:164px} .market.frame .market-stats{margin:.8rem 0} }
+@media (min-width:900px) and (min-aspect-ratio:1/1){
+  .pile-coin{width:27px;height:27px}
+  .pile-coin--parent{width:36px;height:36px}
+  .pile-grid{min-height:calc(8 * 30px)}
+}
+/* hidden machine text leaves the accessibility tree and tab order until it shows */
+.mach-except{visibility:hidden;transition:opacity .5s,visibility .5s}
+.mach[data-mode="auto"] .mach-except{visibility:visible}
+.mach-quote{visibility:hidden;transition:opacity .6s,visibility .6s}
+.mach[data-mode="auto"] .mach-quote{visibility:visible}

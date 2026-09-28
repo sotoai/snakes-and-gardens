@@ -5,7 +5,7 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 // Sound defaults to on, but browsers only allow it after the reader's first tap or key press (see unlockSound).
-const state = {autoplay: !reduced, sound: true, unlocked: false};
+const state = {autoplay: !reduced, sound: true, unlocked: false, refused: false};
 const swap = {under: document.querySelector('#swap-under'), over: document.querySelector('#swap-over'), playing: false, inView: false, userPaused: false};
 
 /* ---------------- Masthead: solid bar, progress, current reel ---------------- */
@@ -29,7 +29,16 @@ onScroll();
 const revealIO = new IntersectionObserver(entries => {
   for (const e of entries) if (e.isIntersecting) { e.target.classList.add('in'); revealIO.unobserve(e.target); }
 }, {threshold: .25});
-$$('.reel-card, .reach, .offspring, .poles').forEach(el => revealIO.observe(el));
+$$('.reel-card, .reach, .offspring, .poles, .four--blank, .slide--tako, .paths').forEach(el => revealIO.observe(el));
+
+/* ---------------- Snapping: one frame per swipe for the story; the notes scroll freely ---------------- */
+const root = document.documentElement;
+root.classList.add('snap');
+const notesSection = $('#notes');
+if (notesSection) {
+  new IntersectionObserver(([e]) => root.classList.toggle('snap', !e.isIntersecting && e.boundingClientRect.top > 0),
+    {rootMargin: '0px 0px -35% 0px'}).observe(notesSection);
+}
 
 /* ---------------- Video manager ---------------- */
 const autoVideos = $$('video[data-auto]');
@@ -49,13 +58,38 @@ function primaryVideo() {
 function applySound() {
   const lead = swap.playing && swap.inView ? swap.under : primaryVideo();
   for (const v of [...autoVideos, swap.under, swap.over]) {
-    if (!v) continue;
+    if (!v || v.dataset.probing) continue;
     v.muted = !(state.sound && state.unlocked && v.dataset.primed && v === lead);
   }
 }
 // iOS pauses a video that gets unmuted outside a tap, and refuses to play it unmuted.
 // If that happens, fall back to muted playback instead of leaving it stopped.
+// Sound is on by default. Where the browser allows sound without a tap (some in-app browsers, or a desktop
+// browser the reader has used here before), the first video simply starts with sound. Otherwise it plays
+// muted, and the first tap anywhere turns sound on (see unlockSound).
+let probed = false;
+function probeSound(v) {
+  probed = true;
+  v.dataset.probing = '1';
+  v.muted = false;
+  return v.play().then(() => {
+    delete v.dataset.probing;
+    state.unlocked = true;
+    for (const x of [...autoVideos, swap.under, swap.over]) if (x) x.dataset.primed = '1';
+    renderSound();
+    applySound();
+  }, err => {
+    delete v.dataset.probing;
+    v.muted = true;
+    // Paused or failed to load before it could start: that isn't a refusal, so try again on the next play.
+    if (err.name !== 'NotAllowedError') { probed = false; applySound(); return; }
+    state.refused = true;
+    renderSound();
+    if (state.autoplay && v === primaryVideo() && !v.dataset.userPaused) v.play().catch(() => {});
+  });
+}
 function playSafely(v) {
+  if (!probed && state.sound && !state.unlocked) return probeSound(v);
   return v.play().catch(err => {
     if (err.name !== 'NotAllowedError' || v.muted) return;
     delete v.dataset.primed;
@@ -83,7 +117,7 @@ const videoIO = new IntersectionObserver(entries => {
 autoVideos.forEach(v => {
   videoIO.observe(v);
   v.addEventListener('click', () => {
-    if (justUnlocked) return;
+    if (justUnlocked() && !v.paused) return;
     if (v.paused) { delete v.dataset.userPaused; playSafely(v); }
     else { v.dataset.userPaused = '1'; v.pause(); }
   });
@@ -99,10 +133,13 @@ function renderSound() {
   soundBtn.setAttribute('aria-pressed', state.sound && state.unlocked);
   soundBtn.classList.toggle('waiting', state.sound && !state.unlocked);
   $('.label', soundBtn).textContent = !state.sound ? 'Sound off' : state.unlocked ? 'Sound on' : 'Tap for sound';
+  const cta = $('#sound-cta');
+  if (cta) cta.hidden = !(state.sound && !state.unlocked && (state.refused || !state.autoplay));
 }
 // Called inside a tap or key press. Playing each video once, unmuted, while the gesture is live
 // is what lets it play with sound later, when scrolling brings it on screen.
-let justUnlocked = false;
+let unlockedAt = -Infinity;
+const justUnlocked = () => performance.now() - unlockedAt < 700;
 function unlockSound() {
   if (state.unlocked) return;
   const all = [...autoVideos, swap.under, swap.over].filter(Boolean);
@@ -116,10 +153,11 @@ function unlockSound() {
     return p.then(() => true, err => err.name !== 'NotAllowedError').then(ok => { if (!ok) delete v.dataset.primed; return ok; });
   });
   state.unlocked = true;
-  justUnlocked = true;
-  setTimeout(() => { justUnlocked = false; }, 0);
+  unlockedAt = performance.now();
   renderSound();
-  applySound();
+  // Start whatever should be playing now, while the gesture is still live (Low Power Mode blocks even muted autoplay).
+  updateVideos();
+  swap.resume?.();
   Promise.all(tries).then(results => {
     if (results.some(Boolean)) return;
     state.unlocked = false;
@@ -127,8 +165,12 @@ function unlockSound() {
     applySound();
   });
 }
+const NOT_GESTURES = ['Tab', 'Escape', 'Shift', 'Alt', 'AltGraph', 'Control', 'Meta', 'CapsLock', 'Fn', 'NumLock', 'ScrollLock'];
 function onFirstGesture(e) {
-  if (e.type === 'keydown' && (e.key === 'Tab' || e.key === 'Escape' || e.metaKey || e.ctrlKey)) return;
+  if (e.type === 'keydown') {
+    if (soundBtn.contains(e.target) || NOT_GESTURES.includes(e.key) || e.metaKey || e.ctrlKey) return;
+    if (navigator.userActivation && !navigator.userActivation.isActive) return;
+  }
   if (state.sound) unlockSound();
 }
 // iOS only sends taps on plain text to listeners attached below <body>, so listen on the page's regions too.
@@ -136,8 +178,13 @@ for (const target of [document, $('main'), masthead]) {
   target.addEventListener('click', onFirstGesture, {capture: true});
 }
 document.addEventListener('keydown', onFirstGesture, {capture: true});
+for (const target of [document, $('main'), masthead]) {
+  target.addEventListener('pointerup', e => {
+    if (e.pointerType !== 'mouse' && navigator.userActivation?.isActive) onFirstGesture(e);
+  }, {capture: true});
+}
 soundBtn.addEventListener('click', () => {
-  if (justUnlocked) return;
+  if (justUnlocked()) return;
   state.sound = !(state.sound && state.unlocked);
   if (state.sound && !state.unlocked) { unlockSound(); return; }
   renderSound();
@@ -147,18 +194,38 @@ soundBtn.addEventListener('click', () => {
   }
   applySound();
 });
+$('#sound-cta')?.addEventListener('click', () => {
+  const v = primaryVideo();
+  if (v && v.paused) { delete v.dataset.userPaused; playSafely(v); }
+});
 renderSound();
 function setAutoplay(on) {
   state.autoplay = on;
   motionBtn.setAttribute('aria-pressed', on);
   $('.label', motionBtn).textContent = on ? 'Autoplay on' : 'Autoplay off';
-  if (!on) autoVideos.forEach(v => v.pause());
+  if (!on) { autoVideos.forEach(v => v.pause()); swap.stop?.(); }
   updateVideos();
+  renderSound();
 }
 motionBtn.addEventListener('click', () => setAutoplay(!state.autoplay));
 setAutoplay(state.autoplay);
 // Browsers may pause muted videos while a tab or pane is hidden; resume the lead video when it's visible again.
-document.addEventListener('visibilitychange', () => { if (!document.hidden) updateVideos(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { autoVideos.forEach(v => { if (!v.paused) v.pause(); }); swap.stop?.(); return; }
+  updateVideos();
+  swap.resume?.();
+});
+// Hardware media keys and the OS media controls pause for real, instead of being undone by the next tick.
+if ('mediaSession' in navigator) {
+  navigator.mediaSession.setActionHandler('pause', () => {
+    autoVideos.forEach(v => { if (!v.paused) { v.dataset.userPaused = '1'; v.pause(); } });
+    if (swap.playing) { swap.userPaused = true; swap.stop?.(); }
+  });
+  navigator.mediaSession.setActionHandler('play', () => {
+    const l = primaryVideo();
+    if (l) { delete l.dataset.userPaused; playSafely(l); }
+  });
+}
 setInterval(() => { if (!document.hidden) updateVideos(); }, 2500);
 
 /* ---------------- Scrolly scenes ---------------- */
@@ -226,13 +293,14 @@ dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close();
   const grid = $('#wall-grid'); if (!grid || !data.length) return;
   const filtersEl = $('#wall-filters');
   const LENSES = {
+    x: {key: 'x', order: {f: 0, q: 1, w: 2, m: 3, o: 4}, cats: [['f', 'Laughed, tagged, passed it on', 'x-f'], ['q', 'Real or AI?', 'x-q'], ['w', 'Worried what\u2019s real', 'x-w'], ['m', 'Followed the money', 'x-m'], ['o', 'Everything else', 'x-o']]},
     r: {key: 'r', order: {d: 0, a: 1, n: 2}, cats: [['d', 'Delight', 'r-d'], ['a', 'Alarm', 'r-a'], ['n', 'Neither', 'r-n']]},
     s: {key: 's', order: {a: 0, r: 1, m: 2, q: 3, n: 4}, cats: [['a', 'Said AI', 's-a'], ['r', 'Said real', 's-r'], ['m', 'Remake or wig', 's-m'], ['q', 'Just asked', 's-q'], ['n', "Didn't say", 's-n']]},
   };
-  const reactionLabel = {d: 'Delight', a: 'Alarm', n: 'Neither delight nor alarm'};
+  const didLabel = {f: 'passed it on', q: 'real or AI?', w: 'worried what\u2019s real', m: 'followed the money', o: ''};
   const stanceLabel = {a: 'said it was AI', r: 'said it was real', m: 'called it a remake, a skit or a wig', q: 'just asked', n: 'took no position'};
   const modeLabel = {qu: 'quoted the video', re: 'a remark', im: 'posted an image', em: 'emoji', ta: 'tagged someone', cl: ''};
-  let lens = LENSES.r, filter = 'all', items = [], selected = null;
+  let lens = LENSES.x, filter = 'all', items = [], selected = null;
   function build() {
     items = data.map((c, i) => ({...c, i})).sort((x, y) => (lens.order[x[lens.key]] ?? 9) - (lens.order[y[lens.key]] ?? 9) || x.i - y.i);
     const cls = Object.fromEntries(lens.cats.map(([k, , c]) => [k, c]));
@@ -256,9 +324,9 @@ dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close();
     const c = items[k]; if (!c) return;
     selected?.classList.remove('sel');
     selected = grid.children[k]; selected?.classList.add('sel');
-    const bits = [reactionLabel[c.r] || '', stanceLabel[c.s] || ''];
-    if (c.s === 'a' && c.c === 'i') bits[1] += ' (implied)';
-    if (c.s === 'n' && modeLabel[c.m]) bits.push(modeLabel[c.m]);
+    const bits = lens.key === 'x' ? [didLabel[c.x] || ''] : [stanceLabel[c.s] || ''];
+    if (lens.key === 's' && c.s === 'a' && c.c === 'i') bits[0] += ' (implied)';
+    if (modeLabel[c.m]) bits.push(modeLabel[c.m]);
     bits.push(c.l === 'r' ? 'a reply' : 'a comment');
     if (c.g) bits.push(`${c.g} before capture`);
     $('#wall-meta').textContent = bits.filter(Boolean).join(' · ');
@@ -277,7 +345,7 @@ dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close();
     lens = LENSES[t.dataset.lens]; build(); randomPick();
   }));
   build();
-  const start = items.findIndex(c => /support data centers/i.test(c.t));
+  const start = items.findIndex(c => /^Hit da road duuuudeee/i.test(c.t));
   show(start >= 0 ? start : 0);
 })();
 
@@ -307,10 +375,14 @@ dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close();
     if (Math.abs(d) > .12) swap.over.currentTime = swap.under.currentTime;
     raf = requestAnimationFrame(sync);
   }
-  async function play() {
+  let starting = false;
+  async function play(auto) {
+    if (starting) return;
+    starting = true;
     for (const v of [swap.under, swap.over]) if (v.preload === 'none') { v.preload = 'auto'; v.load(); }
     swap.over.currentTime = swap.under.currentTime;
-    try { await Promise.all([swap.under.play(), swap.over.play()]); } catch { return; }
+    try { await Promise.all([swap.under.play(), swap.over.play()]); } catch { return; } finally { starting = false; }
+    if (auto && !swap.inView) { swap.under.pause(); swap.over.pause(); return; }
     swap.playing = true; btn.textContent = '❚❚ Pause'; btn.setAttribute('aria-pressed', 'true');
     applySound(); cancelAnimationFrame(raf); sync();
   }
@@ -318,12 +390,16 @@ dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close();
     swap.under.pause(); swap.over.pause(); swap.playing = false; cancelAnimationFrame(raf);
     btn.textContent = '▶ Play both'; btn.setAttribute('aria-pressed', 'false'); applySound();
   }
-  btn.addEventListener('click', () => swap.playing ? pause() : play());
+  btn.addEventListener('click', () => {
+    if (swap.playing) { swap.userPaused = true; pause(); } else { swap.userPaused = false; play(); }
+  });
+  swap.stop = pause;
+  swap.resume = () => { if (swap.inView && state.autoplay && !swap.playing && !swap.userPaused) play(true); };
   swap.under.addEventListener('seeked', () => { swap.over.currentTime = swap.under.currentTime; });
   new IntersectionObserver(([e]) => {
     swap.inView = e.isIntersecting && e.intersectionRatio > .4;
     if (swap.inView) {
-      if (state.autoplay && !swap.playing && !swap.userPaused) play();
+      if (state.autoplay && !swap.playing && !swap.userPaused) play(true);
       if (!hinted && !reduced) {
         hinted = true;
         const t0 = performance.now();
@@ -333,7 +409,6 @@ dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close();
     } else if (swap.playing) pause();
     applySound();
   }, {threshold: [0, .4, .8]}).observe(frame);
-  btn.addEventListener('click', () => { swap.userPaused = !swap.playing; });
 })();
 
 /* ---------------- Shared data (market snapshot + token births) ---------------- */
@@ -645,4 +720,83 @@ const snapshot = fetch('assets/data/market-snapshot.json').then(r => r.json()).c
     draw(t.dataset.model);
   }
   select(tabs[0]);
+})();
+
+/* ---------------- Coin pile: spin-off coins stacking up by day ---------------- */
+(async function coinPile() {
+  const grid = $('#pile-grid'); if (!grid) return;
+  const snap = await snapshot; if (!snap) return;
+  const launch = Date.parse(snap.launch.pumpfun);
+  const kids = snap.children.filter(c => !c.preexisting).sort((a, b) => a.created - b.created);
+  const tz = {timeZone: 'America/Los_Angeles'};
+  const dayKey = ms => new Date(ms).toLocaleDateString('en-US', {...tz, month: 'short', day: 'numeric'});
+  const when = ms => new Date(ms).toLocaleString('en-US', {...tz, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'}).replace(' AM', ' a.m.').replace(' PM', ' p.m.');
+  const days = [];
+  for (let t = launch; t <= kids[kids.length - 1].created + 864e5; t += 864e5) { const k = dayKey(t); if (!days.includes(k)) days.push(k); }
+  const cols = new Map(days.map(k => [k, []]));
+  const readout = $('#pile-readout'), count = $('#pile-n');
+  const coins = [];
+  const colEls = days.map((k, di) => {
+    const col = document.createElement('div'); col.className = 'pile-col';
+    const stack = document.createElement('div'); stack.className = 'pile-stack';
+    if (di === 0) {
+      const p = document.createElement('button'); p.type = 'button'; p.className = 'pile-coin pile-coin--parent';
+      p.innerHTML = '<svg viewBox="0 0 100 100" aria-hidden="true" focusable="false"><use href="#jp-mark"/></svg>';
+      p.setAttribute('aria-label', `JEANPHIL, launched ${when(launch)}`);
+      p.addEventListener('click', () => { readout.textContent = `JEANPHIL · launched ${when(launch)}`; });
+      stack.append(p);
+    }
+    const lab = document.createElement('span'); lab.className = 'pile-day mono'; lab.textContent = k.replace('Sep', 'Sept');
+    col.append(stack, lab); grid.append(col); return stack;
+  });
+  kids.forEach((c, i) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'pile-coin' + (c.name ? '' : ' pile-coin--withheld');
+    b.innerHTML = '<svg viewBox="0 0 100 100" aria-hidden="true" focusable="false"><use href="#jp-mark"/></svg>';
+    const h = Math.round((c.created - launch) / 36e5);
+    const label = `${c.name || 'Name withheld'} · ${when(c.created)} · ${h} hours after launch`;
+    b.setAttribute('aria-label', label);
+    b.addEventListener('click', () => { readout.textContent = label; coins.forEach(x => x.classList.remove('sel')); b.classList.add('sel'); });
+    colEls[days.indexOf(dayKey(c.created))].append(b); coins.push(b);
+  });
+  count.textContent = reduced ? kids.length : 0;
+  let played = false;
+  function play() {
+    if (played) return; played = true;
+    if (reduced) { coins.forEach(b => b.classList.add('on')); return; }
+    coins.forEach((b, i) => setTimeout(() => { b.classList.add('on'); count.textContent = i + 1; }, 300 + i * 190));
+    setTimeout(() => { readout.textContent = 'The first six arrived within two hours. Tap a coin.'; }, 300 + kids.length * 190 + 200);
+  }
+  new IntersectionObserver(([e]) => { if (e.isIntersecting && e.intersectionRatio > .5) play(); }, {threshold: [0, .5, .8]}).observe(grid);
+})();
+
+/* ---------------- The machine: four parts, then take the people out ---------------- */
+(function machine() {
+  const fig = $('.mach'); if (!fig) return;
+  const data = JSON.parse($('#mach-data').textContent);
+  const stations = $$('.mach-st', fig), card = $('.mach-text', fig), kick = $('.mach-kick', fig);
+  const toggle = $('.mach-toggle', fig), who = $('.mach-who', fig);
+  const order = ['face', 'attention', 'coin', 'copies'];
+  let mode = 'people', sel = 'face', touched = false, timers = [];
+  const q = t => t.replace(/“([^”]+)”/g, '<q>$1</q>');
+  function render() {
+    fig.dataset.mode = mode;
+    stations.forEach(b => { const on = b.dataset.st === sel; b.classList.toggle('sel', on); b.setAttribute('aria-pressed', on); });
+    kick.textContent = mode === 'people' ? 'Today · people' : (sel === 'attention' ? "The paper's version · still you" : "The paper's version · itself");
+    card.innerHTML = q(data[sel][mode === 'people' ? 'people' : 'auto']);
+    who.textContent = mode === 'people' ? 'People' : 'Itself.';
+    toggle.textContent = mode === 'people' ? 'Take the people out' : 'Put the people back';
+    toggle.setAttribute('aria-pressed', mode !== 'people');
+  }
+  const stop = () => { touched = true; timers.forEach(clearTimeout); timers = []; };
+  stations.forEach(b => b.addEventListener('click', () => { stop(); sel = b.dataset.st; render(); }));
+  toggle.addEventListener('click', () => { stop(); mode = mode === 'people' ? 'auto' : 'people'; render(); });
+  render();
+  // Walk through it once on arrival (and in the screen recording); any tap takes over.
+  let played = false;
+  function play() {
+    if (played || touched || reduced) return; played = true;
+    const steps = [...order.map(st => () => { sel = st; mode = 'people'; }), () => { mode = 'auto'; sel = 'face'; }, ...order.slice(1).map(st => () => { sel = st; })];
+    steps.forEach((fn, k) => timers.push(setTimeout(() => { if (!touched) { fn(); render(); } }, 900 + k * 2600)));
+  }
+  new IntersectionObserver(([e]) => { if (e.isIntersecting && e.intersectionRatio > .6) play(); }, {threshold: [0, .6, .9]}).observe(fig);
 })();
