@@ -293,11 +293,11 @@ dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close();
   const grid = $('#wall-grid'); if (!grid || !data.length) return;
   const filtersEl = $('#wall-filters');
   const LENSES = {
-    x: {key: 'x', order: {f: 0, q: 1, w: 2, m: 3, o: 4}, cats: [['f', 'Laughed, tagged, passed it on', 'x-f'], ['q', 'Argued: real or AI?', 'x-q'], ['w', 'Worried what\u2019s real', 'x-w'], ['m', 'Followed the money', 'x-m'], ['o', 'Everything else', 'x-o']]},
+    x: {key: 'x', order: {f: 0, q: 1, w: 2, m: 3, o: 4}, cats: [['f', 'Laughed, tagged, passed it on', 'x-f'], ['q', 'Real or AI?', 'x-q'], ['w', 'Worried what\u2019s real', 'x-w'], ['m', 'Followed the money', 'x-m'], ['o', 'Everything else', 'x-o']]},
     r: {key: 'r', order: {d: 0, a: 1, n: 2}, cats: [['d', 'Delight', 'r-d'], ['a', 'Alarm', 'r-a'], ['n', 'Neither', 'r-n']]},
     s: {key: 's', order: {a: 0, r: 1, m: 2, q: 3, n: 4}, cats: [['a', 'Said AI', 's-a'], ['r', 'Said real', 's-r'], ['m', 'Remake or wig', 's-m'], ['q', 'Just asked', 's-q'], ['n', "Didn't say", 's-n']]},
   };
-  const didLabel = {f: 'passed it on', q: 'argued real or AI', w: 'worried what\u2019s real', m: 'followed the money', o: ''};
+  const didLabel = {f: 'passed it on', q: 'real or AI?', w: 'worried what\u2019s real', m: 'followed the money', o: ''};
   const stanceLabel = {a: 'said it was AI', r: 'said it was real', m: 'called it a remake, a skit or a wig', q: 'just asked', n: 'took no position'};
   const modeLabel = {qu: 'quoted the video', re: 'a remark', im: 'posted an image', em: 'emoji', ta: 'tagged someone', cl: ''};
   let lens = LENSES.x, filter = 'all', items = [], selected = null;
@@ -324,9 +324,9 @@ dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close();
     const c = items[k]; if (!c) return;
     selected?.classList.remove('sel');
     selected = grid.children[k]; selected?.classList.add('sel');
-    const bits = [didLabel[c.x] || '', stanceLabel[c.s] || ''];
-    if (c.s === 'a' && c.c === 'i') bits[1] += ' (implied)';
-    if (c.s === 'n' && modeLabel[c.m]) bits.push(modeLabel[c.m]);
+    const bits = lens.key === 'x' ? [didLabel[c.x] || ''] : [stanceLabel[c.s] || ''];
+    if (lens.key === 's' && c.s === 'a' && c.c === 'i') bits[0] += ' (implied)';
+    if (modeLabel[c.m]) bits.push(modeLabel[c.m]);
     bits.push(c.l === 'r' ? 'a reply' : 'a comment');
     if (c.g) bits.push(`${c.g} before capture`);
     $('#wall-meta').textContent = bits.filter(Boolean).join(' · ');
@@ -345,7 +345,7 @@ dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close();
     lens = LENSES[t.dataset.lens]; build(); randomPick();
   }));
   build();
-  const start = items.findIndex(c => /support data centers/i.test(c.t));
+  const start = items.findIndex(c => /^Hit da road duuuudeee/i.test(c.t));
   show(start >= 0 ? start : 0);
 })();
 
@@ -720,4 +720,49 @@ const snapshot = fetch('../who-is-jean-phil/assets/data/market-snapshot.json').t
     draw(t.dataset.model);
   }
   select(tabs[0]);
+})();
+
+/* ---------------- Coin pile: spin-off coins stacking up by day ---------------- */
+(async function coinPile() {
+  const grid = $('#pile-grid'); if (!grid) return;
+  const snap = await snapshot; if (!snap) return;
+  const launch = Date.parse(snap.launch.pumpfun);
+  const kids = snap.children.filter(c => !c.preexisting).sort((a, b) => a.created - b.created);
+  const tz = {timeZone: 'America/Los_Angeles'};
+  const dayKey = ms => new Date(ms).toLocaleDateString('en-US', {...tz, month: 'short', day: 'numeric'});
+  const when = ms => new Date(ms).toLocaleString('en-US', {...tz, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'}).replace(' AM', ' a.m.').replace(' PM', ' p.m.');
+  const days = [];
+  for (let t = launch; t <= kids[kids.length - 1].created + 864e5; t += 864e5) { const k = dayKey(t); if (!days.includes(k)) days.push(k); }
+  const cols = new Map(days.map(k => [k, []]));
+  const readout = $('#pile-readout'), count = $('#pile-n');
+  const coins = [];
+  const colEls = days.map((k, di) => {
+    const col = document.createElement('div'); col.className = 'pile-col';
+    const stack = document.createElement('div'); stack.className = 'pile-stack';
+    if (di === 0) {
+      const p = document.createElement('button'); p.type = 'button'; p.className = 'pile-coin pile-coin--parent'; p.textContent = 'JP';
+      p.setAttribute('aria-label', `JEANPHIL, launched ${when(launch)}`);
+      p.addEventListener('click', () => { readout.textContent = `JEANPHIL · launched ${when(launch)}`; });
+      stack.append(p);
+    }
+    const lab = document.createElement('span'); lab.className = 'pile-day mono'; lab.textContent = k.replace('Sep', 'Sept');
+    col.append(stack, lab); grid.append(col); return stack;
+  });
+  kids.forEach((c, i) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'pile-coin' + (c.name ? '' : ' pile-coin--withheld');
+    const h = Math.round((c.created - launch) / 36e5);
+    const label = `${c.name || 'Name withheld'} · ${when(c.created)} · ${h} hours after launch`;
+    b.setAttribute('aria-label', label);
+    b.addEventListener('click', () => { readout.textContent = label; coins.forEach(x => x.classList.remove('sel')); b.classList.add('sel'); });
+    colEls[days.indexOf(dayKey(c.created))].append(b); coins.push(b);
+  });
+  count.textContent = reduced ? kids.length : 0;
+  let played = false;
+  function play() {
+    if (played) return; played = true;
+    if (reduced) { coins.forEach(b => b.classList.add('on')); return; }
+    coins.forEach((b, i) => setTimeout(() => { b.classList.add('on'); count.textContent = i + 1; }, 300 + i * 190));
+    setTimeout(() => { readout.textContent = 'The first six arrived within two hours. Tap a coin.'; }, 300 + kids.length * 190 + 200);
+  }
+  new IntersectionObserver(([e]) => { if (e.isIntersecting && e.intersectionRatio > .5) play(); }, {threshold: [0, .5, .8]}).observe(grid);
 })();
