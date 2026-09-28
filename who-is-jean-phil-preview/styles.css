@@ -787,3 +787,18 @@ a.xref:hover{text-decoration-color:currentColor}
   .slide--cover .cover-art{background-size:168px auto!important}
   .slide--cover .slide-in{max-width:40rem;margin:0 auto}
 }
+
+/* The Jean Phil symbol, used across the page */
+.pile-coin{background:var(--red)!important;box-shadow:0 0 0 2px var(--blond),0 3px 0 rgba(0,0,0,.4)!important;display:grid;place-items:center;overflow:hidden}
+.pile-coin svg{width:82%;height:82%;margin-top:6%}
+.pile-coin--parent{box-shadow:0 0 0 3px var(--blond),0 0 0 6px var(--red),0 3px 0 rgba(0,0,0,.4)!important}
+.pile-coin--withheld{background:#8e836e!important;box-shadow:0 0 0 2px #b9ae98,0 3px 0 rgba(0,0,0,.4)!important;--jp-face:#8e836e;--jp-hair:#cfc6b2;--jp-ink:#3b3630}
+.swap-handle svg{background:var(--red)!important;padding:5px!important;--jp-face:var(--red)}
+.jp-coin{width:.78em;height:.78em;vertical-align:-.04em;margin-right:.18em;border-radius:50%;background:var(--red);box-shadow:0 0 0 2px var(--blond)}
+.jp-credit{display:block;width:64px;height:64px;margin:0 auto 1.4rem;border-radius:14px;background:var(--red)}
+.jp-hero{display:block;width:clamp(120px,30vw,200px);height:auto;aspect-ratio:1;margin:0 0 1.4rem;border-radius:20px;background:var(--red)}
+.slide--crowd{position:relative;overflow:hidden}
+.slide--crowd::before{content:"";position:absolute;inset:0;background:url(../who-is-jean-phil/assets/brand/jp-tile.svg) 0 0/120px auto repeat;opacity:.16;-webkit-mask-image:radial-gradient(ellipse 80% 70% at 50% 50%,transparent 0,transparent 30%,#000 75%);mask-image:radial-gradient(ellipse 80% 70% at 50% 50%,transparent 0,transparent 30%,#000 75%);pointer-events:none}
+.slide--crowd .slide-in{position:relative;z-index:1}
+.market-price .jp-coin{display:inline-block!important;max-width:none}
+.market-change{white-space:nowrap}

@@ -740,7 +740,8 @@ const snapshot = fetch('../who-is-jean-phil/assets/data/market-snapshot.json').t
     const col = document.createElement('div'); col.className = 'pile-col';
     const stack = document.createElement('div'); stack.className = 'pile-stack';
     if (di === 0) {
-      const p = document.createElement('button'); p.type = 'button'; p.className = 'pile-coin pile-coin--parent'; p.textContent = 'JP';
+      const p = document.createElement('button'); p.type = 'button'; p.className = 'pile-coin pile-coin--parent';
+      p.innerHTML = '<svg viewBox="0 0 100 100" aria-hidden="true" focusable="false"><use href="#jp-mark"/></svg>';
       p.setAttribute('aria-label', `JEANPHIL, launched ${when(launch)}`);
       p.addEventListener('click', () => { readout.textContent = `JEANPHIL · launched ${when(launch)}`; });
       stack.append(p);
@@ -750,6 +751,7 @@ const snapshot = fetch('../who-is-jean-phil/assets/data/market-snapshot.json').t
   });
   kids.forEach((c, i) => {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'pile-coin' + (c.name ? '' : ' pile-coin--withheld');
+    b.innerHTML = '<svg viewBox="0 0 100 100" aria-hidden="true" focusable="false"><use href="#jp-mark"/></svg>';
     const h = Math.round((c.created - launch) / 36e5);
     const label = `${c.name || 'Name withheld'} · ${when(c.created)} · ${h} hours after launch`;
     b.setAttribute('aria-label', label);
