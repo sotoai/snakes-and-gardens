@@ -304,7 +304,7 @@ function init(root) {
   }
   function tap(px, py) {
     for (const c of cards) { const k = (t - c.t0) / c.dur; if (k > .9) continue; c.t0 = t - c.dur * .9; c.dur = c.dur; return; }
-    if (Math.hypot(px - L.mx, py - L.my) < L.S * 1.3) { shake = t; chomp = t; gaze = 1; poked++; say(poked > 2 ? 'Still nobody in there.' : "Nobody's in there.", poked > 2 ? 'poke2' : 'poke'); return; }
+    if (Math.hypot(px - L.mx, py - L.my) < L.S * 1.3) { shake = t; chomp = t; gaze = 1; poked++; say(poked > 2 ? 'Knock knock. Still nobody.' : 'Knock knock. Nobody answers.', poked > 2 ? 'poke2' : 'poke'); return; }
     let best = null, bd = 1e9;
     for (const c of copies) { const s = L.slots[c.slot], d = Math.hypot(px - s.x, py - s.y); if (d < bd) { bd = d; best = c; } }
     if (best && bd < L.size * .7) pop(best);
