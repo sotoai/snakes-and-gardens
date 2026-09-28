@@ -778,3 +778,12 @@ a.xref:hover{text-decoration-color:currentColor}
   .pile-day{font-size:.66rem}
   .coin-pile{max-width:860px}
 }
+
+/* Cover: the Jean Phil symbol as wallpaper; the copy sits on a clean red panel */
+.slide--cover,.slide--cover.slide{background:#fd0001!important;justify-content:center!important;padding-top:calc(var(--nav-h,56px) + 16px)!important}
+.slide--cover .cover-art{background:url(../who-is-jean-phil/assets/brand/jp-tile.svg) 0 0/132px auto repeat!important}
+.slide--cover .slide-in{background:#fd0001;padding:1.3rem 1.4rem 1.5rem;box-shadow:0 0 0 12px #fd0001;max-width:34rem}
+@media (min-aspect-ratio:1/1) and (min-width:900px){
+  .slide--cover .cover-art{background-size:168px auto!important}
+  .slide--cover .slide-in{max-width:40rem;margin:0 auto}
+}
