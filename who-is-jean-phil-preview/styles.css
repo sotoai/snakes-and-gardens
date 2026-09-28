@@ -956,3 +956,16 @@ html.snap{scroll-padding-top:0}
 @media (max-height:720px) and (max-aspect-ratio:1/1){ .slide--monster .monster{width:calc(37svh * .75)} }
 @media (max-height:800px) and (max-aspect-ratio:1/1){ .slide--monster .monster{width:calc(40svh * .75)} }
 @media (max-height:720px) and (max-aspect-ratio:1/1){ .slide--monster .monster{width:calc(36svh * .75)} }
+/* Take him down: the game, drawn on paper */
+.takedown.frame{background:var(--paper);color:var(--ink-p)}
+.takedown .frame-sub{color:var(--mute-p)}
+.takedown .frame-head{margin-bottom:.2rem}
+.tk{width:100%;max-width:980px;margin:0 auto;display:grid;gap:.35rem}
+.tk-cap{font-family:var(--display);font-style:italic;font-size:clamp(1.15rem,1rem + .8vw,1.6rem);line-height:1.18;text-align:center;min-height:2.4em;display:grid;place-items:center;transition:opacity .14s;text-wrap:balance;margin:0}
+.tk-cap.swap{opacity:0}
+.tk-canvas{display:block;width:100%;height:min(58svh,560px);touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:transparent;outline-offset:4px}
+.tk-canvas:focus-visible{outline:2px solid var(--ink-p)}
+@media (min-width:900px) and (min-aspect-ratio:1/1){.tk-canvas{height:min(58svh,600px)}}
+@media (max-height:720px){.tk-canvas{height:54svh}.tk-cap{min-height:2.2em;font-size:1.05rem}}
+@media (max-width:899px),(max-aspect-ratio:1/1){ .tk-canvas{height:min(63svh,600px)} }
+@media (max-height:720px){ .tk-canvas{height:56svh} }

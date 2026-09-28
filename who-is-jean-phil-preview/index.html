@@ -393,61 +393,14 @@
   </div>
 </section>
 
-<section class="machine frame" id="machine-graphic" aria-labelledby="mach-h">
-  <p class="frame-head" id="mach-h">Try to switch it off</p>
-  <p class="frame-sub">Tap a part to take it out.</p>
-  <figure class="mach" data-state="running">
-    <div class="mach-ring">
-      <svg class="mach-loop" viewBox="0 0 300 300" aria-hidden="true" focusable="false">
-        <defs><marker id="mach-arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
-        <g class="mach-arcs" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-          <path d="M196,52 A112,112 0 0 1 248,104" marker-end="url(#mach-arrow)"/>
-          <path d="M248,196 A112,112 0 0 1 196,248" marker-end="url(#mach-arrow)"/>
-          <path d="M104,248 A112,112 0 0 1 52,196" marker-end="url(#mach-arrow)"/>
-          <path d="M52,104 A112,112 0 0 1 104,52" marker-end="url(#mach-arrow)"/>
-        </g>
-      </svg>
-      <button type="button" class="mach-st" data-st="face" aria-label="Take out the face" style="--x:50%;--y:12%"><span class="mach-ico"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#jp-mark"/></svg></span><span class="mach-lab mono">The face</span><span class="mach-tag mono" aria-hidden="true"></span></button>
-      <button type="button" class="mach-st" data-st="attention" aria-label="Take out the audience" style="--x:88%;--y:50%"><span class="mach-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/></svg></span><span class="mach-lab mono">The audience</span><span class="mach-tag mono" aria-hidden="true"></span></button>
-      <button type="button" class="mach-st" data-st="coin" aria-label="Take out the coin" style="--x:50%;--y:88%"><span class="mach-ico mach-ico--coin"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#jp-mark"/></svg></span><span class="mach-lab mono">The coin</span><span class="mach-tag mono" aria-hidden="true"></span></button>
-      <button type="button" class="mach-st" data-st="copies" aria-label="Take out the copies" style="--x:12%;--y:50%"><span class="mach-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="12" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="9" y="3" width="12" height="14" rx="2" fill="currentColor" opacity=".35"/></svg></span><span class="mach-lab mono">The copies</span><span class="mach-tag mono" aria-hidden="true"></span></button>
-      <div class="mach-core"><span class="mono">The machine is</span><b class="mach-who">running</b></div>
-    </div>
-    <div class="mach-card" aria-live="polite"><p class="mono mach-kick">How it runs</p><p class="mach-text"></p></div>
-    <button type="button" class="mach-toggle mono" hidden>Look back</button>
-    <p class="mach-quote mono">“We do not claim that harmful [self-sovereign agents] can be fully prevented.” <a class="xref" href="https://self-sovereign-agent.github.io/paper.pdf" target="_blank" rel="noopener">The paper</a>'s authors</p>
-  </figure>
-  <script type="application/json" id="mach-data">{
- "intro": {
-  "kick": "How it runs",
-  "text": "A face, an audience, a coin and copies of all three, each feeding the next. In principle, nobody has to be at the wheel."
- },
- "face": {
-  "kick": "Kill the face",
-  "text": "Another turns up. By Sept 24, <a class='xref' href='https://trending.knowyourmeme.com/editorials/guides/who-is-jean-philanthrope-and-is-he-ai-the-mysterious-frenchman-named-jean-phil-shadowboxing-across-social-media-explained' target='_blank' rel='noopener'>Know Your Meme</a> was reporting a rival face, Archibald Brown, with a coin based on him. Same makers? Unknown."
- },
- "coin": {
-  "kick": "Kill the coin",
-  "text": "Too late. At least sixteen coins are built on it; the first appeared 21 hours after launch. Who made them, we can't tell."
- },
- "copies": {
-  "kick": "Take down a copy",
-  "text": "Another goes up. The recipe is public: we made our own on free credits. The paper's agent copies itself onto rented computers and “treats individual hosts as disposable.”"
- },
- "attention": {
-  "kick": "Look away",
-  "text": "Everything stops. No views, no buyers, no new copies. It's the one part the machine can't make for itself: us."
- },
- "back": {
-  "kick": "Look back",
-  "text": "And it's running again."
- },
- "tags": {
-  "face": "new face",
-  "coin": "×16",
-  "copies": "+1"
- }
-}</script>
+<section class="takedown frame" id="takedown" aria-labelledby="tk-h">
+  <p class="frame-head" id="tk-h">Take him down</p>
+  <p class="frame-sub">A toy version of <a class="xref" href="https://self-sovereign-agent.github.io/paper.pdf" target="_blank" rel="noopener">the paper</a>'s machine.</p>
+  <div class="tk">
+    <p class="tk-cap" aria-live="polite">Tap every Jean Phil.</p>
+    <canvas class="tk-canvas" tabindex="0" aria-label="A game. Jean Phils appear on a page and earn coins for a jar that buys more of them. Tap one to take it down; Space or Enter works too."></canvas>
+  </div>
+  <script type="module" src="../who-is-jean-phil/assets/js/takedown.js"></script>
 </section>
 
 <section class="slide">
