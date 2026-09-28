@@ -951,3 +951,4 @@ a.xref:hover{text-decoration-color:currentColor}
 @media (max-height:720px) and (max-aspect-ratio:1/1){.slide--monster .monster{width:calc(42svh * .75)}}
 /* frames snap flush to the top edge; the nav floats over them (no strip of the previous frame) */
 html.snap{scroll-padding-top:0}
+@media (max-height:720px) and (max-aspect-ratio:1/1){.slide--monster .monster{width:calc(40svh * .75)}}
