@@ -956,3 +956,46 @@ html.snap{scroll-padding-top:0}
 @media (max-height:720px) and (max-aspect-ratio:1/1){ .slide--monster .monster{width:calc(37svh * .75)} }
 @media (max-height:800px) and (max-aspect-ratio:1/1){ .slide--monster .monster{width:calc(40svh * .75)} }
 @media (max-height:720px) and (max-aspect-ratio:1/1){ .slide--monster .monster{width:calc(36svh * .75)} }
+/* Take him down: the game, drawn on paper */
+.takedown.frame{background:var(--paper);color:var(--ink-p)}
+.takedown .frame-sub{color:var(--mute-p)}
+.takedown .frame-head{margin-bottom:.2rem}
+.tk{width:100%;max-width:980px;margin:0 auto;display:grid;gap:.35rem}
+.tk-cap{font-family:var(--display);font-style:italic;font-size:clamp(1.15rem,1rem + .8vw,1.6rem);line-height:1.18;text-align:center;min-height:2.4em;display:grid;place-items:center;transition:opacity .14s;text-wrap:balance;margin:0}
+.tk-cap.swap{opacity:0}
+.tk-canvas{display:block;width:100%;height:min(58svh,560px);touch-action:manipulation;cursor:pointer;-webkit-tap-highlight-color:transparent;outline-offset:4px}
+.tk-canvas:focus-visible{outline:2px solid var(--ink-p)}
+@media (min-width:900px) and (min-aspect-ratio:1/1){.tk-canvas{height:min(58svh,600px)}}
+@media (max-height:720px){.tk-canvas{height:54svh}.tk-cap{min-height:2.2em;font-size:1.05rem}}
+@media (max-width:899px),(max-aspect-ratio:1/1){ .tk-canvas{height:min(63svh,600px)} }
+@media (max-height:720px){ .tk-canvas{height:56svh} }
+/* The headless machine: an illustration you can poke */
+.headless.frame{background:var(--paper);color:var(--ink-p)}
+.headless .frame-head{max-width:18ch;margin-bottom:.25rem}
+.headless .frame-sub{color:var(--mute-p);margin-bottom:.4rem}
+@media (min-width:900px) and (min-aspect-ratio:1/1){
+  .headless .frame-head{max-width:26ch}
+  .headless .tk-canvas{height:min(56svh,580px)}
+}
+@media (min-width:900px) and (min-aspect-ratio:1/1) and (max-height:780px){ .headless .tk-canvas{height:50svh} .headless .frame-head{font-size:clamp(1.6rem,1rem + 2vw,2.4rem)} }
+/* Reel V: the question nobody asked, as an empty dashed square */
+.wall-grid i.x-p{background:transparent!important;box-shadow:inset 0 0 0 1px var(--ink-p);border-radius:2px;background-image:repeating-linear-gradient(90deg,transparent 0 3px,var(--paper) 3px 6px)!important;cursor:pointer}
+.square .wall-grid i.x-p{box-shadow:none;outline:1.5px dashed var(--ink-p);outline-offset:-1.5px}
+.square .wall-grid i.x-p.hit{opacity:1;animation:xp-pulse 1.4s ease-in-out infinite}
+@keyframes xp-pulse{50%{transform:scale(1.5)}}
+.sw.x-p{background:transparent!important;outline:1px dashed currentColor;outline-offset:-1px}
+@media (prefers-reduced-motion:reduce){.square .wall-grid i.x-p.hit{animation:none}}
+/* Reel V: the hat */
+.hat.frame{background:var(--paper);color:var(--ink-p)}
+.hat .frame-head{max-width:24ch;margin-bottom:.25rem}
+.hat .frame-sub{color:var(--mute-p);margin-bottom:.4rem}
+.hat-canvas{height:min(50svh,480px);max-width:560px;margin:0 auto}
+.hat-big{font-family:var(--sans-heavy);font-weight:900;letter-spacing:-.03em;line-height:1.02;font-size:clamp(1.5rem,1.1rem + 2vw,2.6rem);text-align:center;margin:.6rem auto 0;max-width:22ch;opacity:0;transform:translateY(8px);transition:opacity .6s,transform .6s}
+.hat-big.on{opacity:1;transform:none}
+@media (max-height:720px){.hat-canvas{height:44svh}}
+/* the wall on a phone: a tighter head and two chips per row */
+@media (max-width:560px){
+  .square.frame .frame-head{font-size:clamp(1.35rem,1.1rem + 2vw,1.7rem);max-width:19ch}
+  .square.frame .wall-filters{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:8px}
+  .square.frame .wall-filters button{font-size:.56rem;padding:4px 7px;text-align:left;line-height:1.25}
+}

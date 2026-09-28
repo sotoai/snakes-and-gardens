@@ -201,6 +201,7 @@ $('#sound-cta')?.addEventListener('click', () => {
 renderSound();
 function setAutoplay(on) {
   state.autoplay = on;
+  document.documentElement.dataset.autoplay = on ? 'on' : 'off';
   motionBtn.setAttribute('aria-pressed', on);
   $('.label', motionBtn).textContent = on ? 'Autoplay on' : 'Autoplay off';
   if (!on) { autoVideos.forEach(v => v.pause()); swap.stop?.(); }
@@ -293,11 +294,12 @@ dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close();
   const grid = $('#wall-grid'); if (!grid || !data.length) return;
   const filtersEl = $('#wall-filters');
   const LENSES = {
-    x: {key: 'x', order: {f: 0, q: 1, w: 2, m: 3, o: 4}, cats: [['f', 'Laughed, tagged, passed it on', 'x-f'], ['q', 'Real or AI?', 'x-q'], ['w', 'Worried what\u2019s real', 'x-w'], ['m', 'Followed the money', 'x-m'], ['o', 'Everything else', 'x-o']]},
+    x: {key: 'x', order: {f: 0, q: 1, w: 2, m: 3, o: 4}, zero: 'p', cats: [['f', 'Laughed, tagged, passed it on', 'x-f'], ['q', 'Real or AI?', 'x-q'], ['w', 'Worried what\u2019s real', 'x-w'], ['m', 'Followed the money', 'x-m'], ['o', 'Everything else', 'x-o'], ['p', 'Asked who\u2019s behind him', 'x-p']]},
     r: {key: 'r', order: {d: 0, a: 1, n: 2}, cats: [['d', 'Delight', 'r-d'], ['a', 'Alarm', 'r-a'], ['n', 'Neither', 'r-n']]},
     s: {key: 's', order: {a: 0, r: 1, m: 2, q: 3, n: 4}, cats: [['a', 'Said AI', 's-a'], ['r', 'Said real', 's-r'], ['m', 'Remake or wig', 's-m'], ['q', 'Just asked', 's-q'], ['n', "Didn't say", 's-n']]},
   };
   const didLabel = {f: 'passed it on', q: 'real or AI?', w: 'worried what\u2019s real', m: 'followed the money', o: ''};
+  let firstWorried = true;
   const stanceLabel = {a: 'said it was AI', r: 'said it was real', m: 'called it a remake, a skit or a wig', q: 'just asked', n: 'took no position'};
   const modeLabel = {qu: 'quoted the video', re: 'a remark', im: 'posted an image', em: 'emoji', ta: 'tagged someone', cl: ''};
   let lens = LENSES.x, filter = 'all', items = [], selected = null;
@@ -305,6 +307,7 @@ dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close();
     items = data.map((c, i) => ({...c, i})).sort((x, y) => (lens.order[x[lens.key]] ?? 9) - (lens.order[y[lens.key]] ?? 9) || x.i - y.i);
     const cls = Object.fromEntries(lens.cats.map(([k, , c]) => [k, c]));
     grid.replaceChildren(...items.map((c, k) => { const el = document.createElement('i'); el.className = cls[c[lens.key]] || ''; el.dataset.k = k; return el; }));
+    if (lens.zero) { const z = document.createElement('i'); z.className = 'x-p'; z.dataset.zero = '1'; z.title = 'Asked who\u2019s behind him: nobody'; grid.append(z); }
     const counts = {}; items.forEach(c => counts[c[lens.key]] = (counts[c[lens.key]] || 0) + 1);
     filtersEl.replaceChildren();
     const mk = (k, label, c, n) => { const b = document.createElement('button'); b.type = 'button'; b.dataset.wall = k; b.setAttribute('aria-pressed', 'false');
@@ -317,7 +320,10 @@ dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close();
     filter = k;
     $$('[data-wall]', filtersEl).forEach(b => b.setAttribute('aria-pressed', b.dataset.wall === k));
     grid.classList.toggle('filtering', k !== 'all');
-    [...grid.children].forEach((el, i) => el.classList.toggle('hit', k === 'all' || items[i][lens.key] === k));
+    [...grid.children].forEach((el, i) => el.classList.toggle('hit', el.dataset.zero ? (k === 'all' || k === lens.zero) : (k === 'all' || items[i][lens.key] === k)));
+    $('#wall-random').hidden = k === lens.zero;
+    if (k === lens.zero) return showZero();
+    if (!quiet && k === 'w' && firstWorried) { firstWorried = false; const j = items.findIndex(c => /more it learns/.test(c.t)); if (j >= 0) return show(j); }
     if (!quiet) randomPick();
   }
   function show(k) {
@@ -332,12 +338,17 @@ dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close();
     $('#wall-meta').textContent = bits.filter(Boolean).join(' · ');
     $('#wall-text').textContent = c.t || '(no text)';
   }
+  function showZero() {
+    selected?.classList.remove('sel'); selected = null;
+    $('#wall-meta').textContent = 'asked who\u2019s behind him';
+    $('#wall-text').textContent = 'Nobody. Not one of the 475 we captured.';
+  }
   function randomPick() {
     const pool = items.map((c, k) => k).filter(k => (filter === 'all' || items[k][lens.key] === filter) && items[k].t && !/^\[/.test(items[k].t));
     if (pool.length) show(pool[Math.floor(Math.random() * pool.length)]);
   }
-  grid.addEventListener('pointerover', e => { if (e.target.dataset.k) show(Number(e.target.dataset.k)); });
-  grid.addEventListener('click', e => { if (e.target.dataset.k) show(Number(e.target.dataset.k)); });
+  grid.addEventListener('pointerover', e => { if (e.target.dataset.zero) return showZero(); if (!e.target.dataset.k || filter === lens.zero) return; show(Number(e.target.dataset.k)); });
+  grid.addEventListener('click', e => { if (e.target.dataset.zero) return setFilter(lens.zero); if (!e.target.dataset.k) return; if (filter === lens.zero) setFilter('all', true); show(Number(e.target.dataset.k)); });
   $('#wall-random').addEventListener('click', randomPick);
   const tabs = $$('.wall-lens [data-lens]');
   tabs.forEach(t => t.addEventListener('click', () => {
@@ -345,7 +356,7 @@ dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close();
     lens = LENSES[t.dataset.lens]; build(); randomPick();
   }));
   build();
-  const start = items.findIndex(c => /^Hit da road duuuudeee/i.test(c.t));
+  const start = items.findIndex(c => /^The original guy/.test(c.t));
   show(start >= 0 ? start : 0);
 })();
 

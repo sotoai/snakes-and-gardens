@@ -34,8 +34,11 @@ function init(root) {
   for (const v of VIRAL) { const im = new Image(); im.decoding = 'async'; im.onerror = () => { delete art[v.doodle]; }; im.src = new URL(`../img/viral-${v.doodle}.webp`, import.meta.url).href; art[v.doodle] = im; }
   let raf = 0, visible = false, last = 0, t = 0; // t: scene seconds (only runs while visible)
   let copies = [], flights = [], fx = [], cards = [], history = [], marks = [];
+  let seeded = false;
   let hAcc = 0, price = 1, spike = null, nextSpawn = .6, nextViral = 6.4, viralIndex = 0, yaw = .2, shake = -9, chomp = -9, gaze = 0, poked = 0;
   const said = new Set(); const capQ = []; let capUntil = 0;
+  // It only plays by itself when the page's Autoplay switch is on and motion isn't reduced; taps always work.
+  const autoOn = () => !reduced && document.documentElement.dataset.autoplay !== 'off';
   const rnd = mulberry32(20260928);
 
   // ---- captions: calm, one at a time
@@ -72,6 +75,8 @@ function init(root) {
     // fill from the monster outwards, so copies crowd in around it first
     slots.sort((a, b) => Math.hypot(a.x - mx, a.y - my) - Math.hypot(b.x - mx, b.y - my));
     L = {port, band, S, mx, my, size, slots, u: Math.min(W, H) / 100};
+    // not playing by itself (Autoplay off or reduced motion): start from a still with copies already out
+    if (!seeded && !autoOn()) { seeded = true; for (let i = 0; i < Math.min(14, slots.length); i++) copies.push({slot: i, born: -9, next: 1e9}); }
     sprite = null;
     const ok = o => o.slot === undefined || o.slot < slots.length;
     copies = copies.filter(ok); flights = flights.filter(ok); fx = fx.filter(ok);
@@ -131,8 +136,8 @@ function init(root) {
   function step(dt) {
     t += dt;
     // a calm baseline: a new copy every couple of seconds
-    if (t >= nextSpawn) { spawn(); nextSpawn = t + (reduced ? 3.2 : 2.2) * (.8 + rnd() * .4); say('It makes copies.', 'makes'); }
-    if (t >= nextViral) { viral(false); nextViral = t + 11 + rnd() * 2; }
+    if (t >= nextSpawn && autoOn()) { spawn(); nextSpawn = t + (reduced ? 3.2 : 2.2) * (.8 + rnd() * .4); say('It makes copies.', 'makes'); }
+    if (t >= nextViral && autoOn()) { viral(false); nextViral = t + 11 + rnd() * 2; }
     // copies earn
     for (const c of copies) if (t >= c.next) { c.next = t + 6 + rnd() * 4; earn(c); if (!said.has('earn') && t > 2.5) say('Every copy earns a little.', 'earn'); }
     // flights land
@@ -170,7 +175,7 @@ function init(root) {
     }
     // the monster
     const sh = !reduced && t - shake < .5 ? Math.sin((t - shake) * 60) * L.S * .05 * (1 - (t - shake) / .5) : 0;
-    let open = .9 + .07 * Math.sin(t * .8) + (t - chomp < .7 ? .35 * Math.sin((t - chomp) / .7 * Math.PI) : 0);
+    let open = (reduced ? .95 : .9 + .07 * Math.sin(t * .8)) + (t - chomp < .7 ? .35 * Math.sin((t - chomp) / .7 * Math.PI) : 0);
     if (cards.some(c => (t - c.t0) / c.dur > CARD_OUT)) open += .3;
     monster({cx: L.mx + sh, cy: L.my + (reduced ? 0 : Math.sin(t * 1.3) * L.S * .04), S: L.S, LW: Math.max(1.3 * dpr, L.S * .02), yaw, t, open, gaze,
       shadow: {y: L.my + L.S * 1.95, bob: 0}});
@@ -302,13 +307,15 @@ function init(root) {
   canvas.addEventListener('pointerup', e => {
     if (!down) return; const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y); down = null;
     if (moved > 12 || !L) return;
+    interacted();
     const r = canvas.getBoundingClientRect(); tap((e.clientX - r.left) * dpr, (e.clientY - r.top) * dpr);
   });
   canvas.addEventListener('keydown', e => {
-    if (e.key !== ' ' && e.key !== 'Enter') return; e.preventDefault();
+    if (e.key !== ' ' && e.key !== 'Enter') return; e.preventDefault(); interacted();
     if (e.key === ' ') { if (!cards.length) viral(true); return; }
     const c = copies.reduce((a, c) => (!a || c.born < a.born ? c : a), null); if (c) pop(c);
   });
+  function interacted() { cap.setAttribute('aria-live', 'polite'); wake(); }
   function pop(c) {
     copies.splice(copies.indexOf(c), 1); fx.push({kind: 'pop', slot: c.slot, t0: t, dur: .45});
     spawn(1.1); if (rnd() < .5) spawn(1.5);
@@ -333,6 +340,8 @@ function init(root) {
     if (L) step(dt);
     pumpCap(now);
     draw(now);
+    // still: once nothing is moving and it isn't playing by itself, stop drawing until someone taps
+    if (!autoOn() && !cards.length && !flights.length && !fx.length && !spike) return;
     if (visible && !document.hidden) raf = requestAnimationFrame(frame);
   }
   function wake() { if (!raf && visible && !document.hidden) { last = 0; raf = requestAnimationFrame(frame); } }
