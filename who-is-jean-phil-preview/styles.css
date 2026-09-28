@@ -781,7 +781,7 @@ a.xref:hover{text-decoration-color:currentColor}
 
 /* Cover: the Jean Phil symbol as wallpaper; the copy sits on a clean red panel */
 .slide--cover,.slide--cover.slide{background:#fd0001!important;justify-content:center!important;padding-top:calc(var(--nav-h,56px) + 16px)!important}
-.slide--cover .cover-art{background:url(../who-is-jean-phil/assets/brand/jp-tile.svg) 0 0/132px auto repeat!important}
+.slide--cover .cover-art{background:url(../who-is-jean-phil/assets/brand/jp-tile.svg?v=blond) 0 0/132px auto repeat!important}
 .slide--cover .slide-in{background:#fd0001;padding:1.3rem 1.4rem 1.5rem;box-shadow:0 0 0 12px #fd0001;max-width:34rem}
 @media (min-aspect-ratio:1/1) and (min-width:900px){
   .slide--cover .cover-art{background-size:168px auto!important}
@@ -798,7 +798,7 @@ a.xref:hover{text-decoration-color:currentColor}
 .jp-credit{display:block;width:64px;height:64px;margin:0 auto 1.4rem;border-radius:14px;background:var(--red)}
 .jp-hero{display:block;width:clamp(120px,30vw,200px);height:auto;aspect-ratio:1;margin:0 0 1.4rem;border-radius:20px;background:var(--red)}
 .slide--crowd{position:relative;overflow:hidden}
-.slide--crowd::before{content:"";position:absolute;inset:0;background:url(../who-is-jean-phil/assets/brand/jp-tile.svg) 0 0/120px auto repeat;opacity:.16;-webkit-mask-image:radial-gradient(ellipse 80% 70% at 50% 50%,transparent 0,transparent 30%,#000 75%);mask-image:radial-gradient(ellipse 80% 70% at 50% 50%,transparent 0,transparent 30%,#000 75%);pointer-events:none}
+.slide--crowd::before{content:"";position:absolute;inset:0;background:url(../who-is-jean-phil/assets/brand/jp-tile.svg?v=blond) 0 0/120px auto repeat;opacity:.16;-webkit-mask-image:radial-gradient(ellipse 80% 70% at 50% 50%,transparent 0,transparent 30%,#000 75%);mask-image:radial-gradient(ellipse 80% 70% at 50% 50%,transparent 0,transparent 30%,#000 75%);pointer-events:none}
 .slide--crowd .slide-in{position:relative;z-index:1}
 .market-price .jp-coin{display:inline-block!important;max-width:none}
 .market-change{white-space:nowrap}
@@ -952,3 +952,7 @@ a.xref:hover{text-decoration-color:currentColor}
 /* frames snap flush to the top edge; the nav floats over them (no strip of the previous frame) */
 html.snap{scroll-padding-top:0}
 @media (max-height:720px) and (max-aspect-ratio:1/1){.slide--monster .monster{width:calc(40svh * .75)}}
+@media (max-width:899px),(max-aspect-ratio:1/1){ .slide--monster .monster{width:min(88vw,calc(46svh * .75),440px)} }
+@media (max-height:720px) and (max-aspect-ratio:1/1){ .slide--monster .monster{width:calc(37svh * .75)} }
+@media (max-height:800px) and (max-aspect-ratio:1/1){ .slide--monster .monster{width:calc(40svh * .75)} }
+@media (max-height:720px) and (max-aspect-ratio:1/1){ .slide--monster .monster{width:calc(36svh * .75)} }

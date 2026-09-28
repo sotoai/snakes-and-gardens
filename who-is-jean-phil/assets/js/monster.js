@@ -212,8 +212,9 @@ function init(canvas) {
       ctx.clip();
       ctx.translate(50, 50); ctx.scale(.74, .74); ctx.translate(-50, -46);
       ctx.fillStyle = C.red; ctx.fill(FACE); ctx.fillStyle = C.hair; ctx.fill(HAIR);
-      ctx.strokeStyle = C.ink; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-      ctx.lineWidth = 4.2; ctx.stroke(STACHE); ctx.lineWidth = 2.8; ctx.stroke(NOSE);
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.strokeStyle = C.hair; ctx.lineWidth = 4.2; ctx.stroke(STACHE); // blond, to match the hair
+      ctx.strokeStyle = C.ink; ctx.lineWidth = 2.8; ctx.stroke(NOSE);
     }
     ctx.restore();
   }
