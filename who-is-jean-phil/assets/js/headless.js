@@ -32,11 +32,12 @@ function init(root) {
   let W = 0, H = 0, dpr = 1, L = null, sprite = null, spriteSize = 0;
   let raf = 0, visible = false, last = 0, t = 0; // t: scene seconds (only runs while visible)
   let copies = [], flights = [], fx = [], cards = [], history = [], marks = [];
-  let hAcc = 0, price = 1, spike = null, nextSpawn = .6, nextViral = 3.8, viralIndex = 0, yaw = .3, shake = 0, chomp = 0, gaze = 0, poked = 0;
+  let hAcc = 0, price = 1, spike = null, nextSpawn = .6, nextViral = 6.4, viralIndex = 0, yaw = .2, shake = -9, chomp = -9, gaze = 0, poked = 0;
   const said = new Set(); const capQ = []; let capUntil = 0;
   const rnd = mulberry32(20260928);
 
   // ---- captions: calm, one at a time
+  function sayNow(text) { capQ.length = 0; capUntil = 0; say(text); }
   function say(text, once) { if (once && said.has(once)) return; if (once) said.add(once); if (capQ.length > 1) capQ.shift(); capQ.push(text); }
   function pumpCap(now) {
     if (!capQ.length || now < capUntil) return;
@@ -69,7 +70,9 @@ function init(root) {
     // fill from the monster outwards, so copies crowd in around it first
     slots.sort((a, b) => Math.hypot(a.x - mx, a.y - my) - Math.hypot(b.x - mx, b.y - my));
     L = {port, band, S, mx, my, size, slots, u: Math.min(W, H) / 100};
-    sprite = null; copies = copies.filter(c => c.slot < slots.length);
+    sprite = null;
+    const ok = o => o.slot === undefined || o.slot < slots.length;
+    copies = copies.filter(ok); flights = flights.filter(ok); fx = fx.filter(ok);
     return true;
   }
   function stickerSprite(sz) {
@@ -87,15 +90,15 @@ function init(root) {
   }
   const ease = k => 1 - Math.pow(1 - Math.min(1, Math.max(0, k)), 3);
   const back = k => { k = Math.min(1, Math.max(0, k)); const c1 = 1.7, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
-  const mouth = () => [L.mx, L.my + L.S * .25];
+  const mouth = () => [L.mx + L.S * .9 * Math.sin(yaw), L.my + L.S * .45];
 
   // ---- the machine's behaviour
   function freeSlot() {
     const used = new Set(copies.map(c => c.slot).concat(flights.filter(f => f.kind === 'copy').map(f => f.slot)));
     for (let i = 0; i < L.slots.length; i++) if (!used.has(i)) return i;
     // full: the oldest copy scrolls away to make room
-    const old = copies.reduce((a, c) => (!a || c.born < a.born ? c : a), null);
-    if (old) { copies.splice(copies.indexOf(old), 1); fx.push({kind: 'fade', slot: old.slot, t0: t, dur: .5}); return old.slot; }
+    const old = copies.reduce((a, c) => (!c.doomed && (!a || c.born < a.born) ? c : a), null);
+    if (old) { old.doomed = true; return old.slot; }
     return -1;
   }
   function spawn(delay = 0) {
@@ -103,24 +106,24 @@ function init(root) {
     flights.push({kind: 'copy', slot, t0: t + delay, dur: reduced ? .01 : .65});
   }
   function earn(c) { // a copy sends a coin back to the machine
-    if (flights.filter(f => f.kind === 'coin').length > 14) return;
+    if (flights.filter(f => f.kind === 'coin').length >= 8) return;
     flights.push({kind: 'coin', slot: c.slot, t0: t, dur: reduced ? .01 : .9});
   }
   function viral(fast) {
     const v = VIRAL[viralIndex++ % VIRAL.length], fromLeft = viralIndex % 2 === 1;
     const y = L.band + (H - L.band) * (.28 + rnd() * .44);
-    cards.push({v, x0: fromLeft ? -W * .2 : W * 1.2, y0: y, t0: t, dur: fast ? .4 : (reduced ? .01 : 1.6), rot: (fromLeft ? -1 : 1) * .12});
-    say(`Viral: ${v.title}.`);
+    cards.push({v, x0: fromLeft ? -W * .2 : W * 1.2, y0: y, t0: t, dur: fast ? .6 : (reduced ? .01 : 2.2), rot: (fromLeft ? -1 : 1) * .12});
+    sayNow(`Viral: ${v.title}.`);
   }
   function hit(card) {
     const v = card.v;
     shake = t; chomp = t; gaze = 1;
-    spike = {from: price, to: price * v.mult, t0: t, dur: .7};
+    spike = {from: price, to: Math.max(price, v.mult), t0: t, dur: .7};
     marks.push({tag: v.tag, at: history.length, t});
     const n = L.port ? 9 : 14;
     for (let k = 0; k < n; k++) spawn(.15 + k * .11);
     fx.push({kind: 'ring', x: L.mx, y: L.my, r: L.S * 1.6, t0: t, dur: .6});
-    setTimeout(() => say(`JEANPHIL ×${(price).toFixed(1)}. More copies.`), 900);
+    say('The coin jumps. More copies.');
   }
 
   function step(dt) {
@@ -129,23 +132,26 @@ function init(root) {
     if (t >= nextSpawn) { spawn(); nextSpawn = t + (reduced ? 3.2 : 2.2) * (.8 + rnd() * .4); say('It makes copies.', 'makes'); }
     if (t >= nextViral) { viral(false); nextViral = t + 9 + rnd() * 2; }
     // copies earn
-    for (const c of copies) if (t >= c.next) { c.next = t + 3.2 + rnd() * 2.2; earn(c); if (!said.has('earn') && t > 2.5) say('Every copy earns a little.', 'earn'); }
+    for (const c of copies) if (t >= c.next) { c.next = t + 6 + rnd() * 4; earn(c); if (!said.has('earn') && t > 2.5) say('Every copy earns a little.', 'earn'); }
     // flights land
     for (let i = flights.length - 1; i >= 0; i--) {
       const f = flights[i]; if (t < f.t0 + f.dur) continue;
       flights.splice(i, 1);
-      if (f.kind === 'copy') { copies.push({slot: f.slot, born: t, next: t + 1 + rnd() * 2}); }
-      if (f.kind === 'coin') price *= 1.004;
+      if (f.kind === 'copy') {
+        const j = copies.findIndex(c => c.slot === f.slot);
+        if (j >= 0) { copies.splice(j, 1); fx.push({kind: 'fade', slot: f.slot, t0: t, dur: .3}); }
+        copies.push({slot: f.slot, born: t, next: t + 1 + rnd() * 2});
+      }
     }
     for (let i = cards.length - 1; i >= 0; i--) { const c = cards[i]; if (t >= c.t0 + c.dur) { cards.splice(i, 1); hit(c); } }
     // the price: spikes on viral moments, then drifts back down
     if (spike) { const k = (t - spike.t0) / spike.dur; price = spike.from + (spike.to - spike.from) * ease(k); if (k >= 1) spike = null; }
-    else price = 1 + (price - 1) * Math.exp(-dt / 7) + (rnd() - .5) * .02;
-    price = Math.max(.6, price);
+    else price = 1 + (price - 1) * Math.exp(-dt / 2.5) + (rnd() - .5) * .02;
+    price = Math.min(3.5, Math.max(.6, price));
     // the chart keeps a sample every 0.1 s: about 26 seconds on screen
     for (hAcc += dt; hAcc >= .1; hAcc -= .1) { history.push(price); if (history.length > 260) { history.shift(); marks.forEach(m => m.at--); marks = marks.filter(m => m.at >= -8); } }
     gaze = Math.max(0, gaze - dt * .6);
-    yaw += dt * (reduced ? 0 : .35 + (t - chomp < .8 ? 2.2 : 0));
+    yaw = reduced ? .2 : .2 + .5 * Math.sin(t * .25);
   }
 
   // ---- drawing
@@ -161,8 +167,9 @@ function init(root) {
       ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.rot); ctx.scale(k, k); ctx.drawImage(spr, -off, -off); ctx.restore();
     }
     // the monster
-    const sh = t - shake < .5 ? Math.sin((t - shake) * 60) * L.S * .05 * (1 - (t - shake) / .5) : 0;
-    const open = .9 + .07 * Math.sin(t * .8) + (t - chomp < .7 ? .35 * Math.sin((t - chomp) / .7 * Math.PI) : 0);
+    const sh = !reduced && t - shake < .5 ? Math.sin((t - shake) * 60) * L.S * .05 * (1 - (t - shake) / .5) : 0;
+    let open = .9 + .07 * Math.sin(t * .8) + (t - chomp < .7 ? .35 * Math.sin((t - chomp) / .7 * Math.PI) : 0);
+    if (cards.some(c => (t - c.t0) / c.dur > .8)) open += .3;
     monster({cx: L.mx + sh, cy: L.my + (reduced ? 0 : Math.sin(t * 1.3) * L.S * .04), S: L.S, LW: Math.max(1.3 * dpr, L.S * .02), yaw, t, open, gaze,
       shadow: {y: L.my + L.S * 1.95, bob: 0}});
     // things in the air
@@ -173,8 +180,8 @@ function init(root) {
         const x = mx + (s.x - mx) * e, y = my + (s.y - my) * e - Math.sin(k * Math.PI) * L.S * .9, sc = .35 + .65 * e;
         ctx.save(); ctx.translate(x, y); ctx.rotate(s.rot * e + (1 - e) * 2); ctx.scale(sc, sc); ctx.drawImage(spr, -off, -off); ctx.restore();
       } else {
-        const x = s.x + (mx - s.x) * e, y = s.y + (my - L.S * .5 - s.y) * e - Math.sin(k * Math.PI) * L.S * .5;
-        coin(x, y, Math.max(3.5 * dpr, L.u * 1.3));
+        const e2 = k * k, x = s.x + (mx - s.x) * e2, y = s.y + (my - s.y) * e2 - Math.sin(k * Math.PI) * L.S * .5;
+        coin(x, y, L.size * .17 * (1 - .5 * Math.max(0, (k - .7) / .3)));
       }
     }
     for (const c of cards) drawCard(c);
@@ -182,8 +189,12 @@ function init(root) {
   }
   function coin(x, y, r) {
     ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = C.gold; ctx.fill();
-    ctx.strokeStyle = C.ink; ctx.lineWidth = Math.max(1, r * .18); ctx.stroke();
-    ctx.beginPath(); ctx.arc(x, y, r * .48, 0, Math.PI * 2); ctx.fillStyle = C.red; ctx.fill();
+    ctx.strokeStyle = C.ink; ctx.lineWidth = Math.max(1, r * .12); ctx.stroke();
+    ctx.save(); ctx.beginPath(); ctx.arc(x, y, r * .76, 0, Math.PI * 2); ctx.fillStyle = C.red; ctx.fill(); ctx.clip();
+    ctx.translate(x, y); ctx.scale(r * .76 * .74 / 38, r * .76 * .74 / 38); ctx.translate(-50, -46);
+    ctx.fillStyle = C.red; ctx.fill(FACE); ctx.fillStyle = C.hair; ctx.fill(HAIR);
+    ctx.strokeStyle = C.hair; ctx.lineWidth = 4.2; ctx.lineCap = 'round'; ctx.stroke(STACHE);
+    ctx.restore();
   }
   function drawChart() {
     const b = L.band, pad = L.u * 2, x0 = W * (L.port ? .27 : .16), x1 = W - pad, y0 = pad * .8, y1 = b - pad * .6;
@@ -194,27 +205,36 @@ function init(root) {
     ctx.fillText('JEANPHIL', pad, (y0 + y1) / 2 - fs * .45);
     ctx.fillStyle = price > 1.6 ? C.red : C.mute; ctx.font = `${fs * 1.15}px ${display}`;
     ctx.fillText(`×${price.toFixed(1)}`, pad, (y0 + y1) / 2 + fs * .75);
+    ctx.fillStyle = C.mute; ctx.font = `italic ${fs * .78}px ${display}`;
+    ctx.fillText('imagined', pad, (y0 + y1) / 2 + fs * 1.85);
     if (history.length < 2) return;
     const max = Math.max(2, ...history) * 1.08, n = 260;
     const X = i => x1 - (history.length - 1 - i) * (x1 - x0) / (n - 1), Y = v => y1 - (v / max) * (y1 - y0);
     ctx.strokeStyle = C.ink; ctx.lineWidth = Math.max(1.4 * dpr, L.u * .45); ctx.lineJoin = 'round';
     ctx.beginPath(); history.forEach((v, i) => i ? ctx.lineTo(X(i), Y(v)) : ctx.moveTo(X(i), Y(v))); ctx.stroke();
     // mark each viral moment where it hit
-    ctx.font = `italic ${fs * .78}px ${display}`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.font = `italic ${fs * .9}px ${display}`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
     for (const m of marks) {
       const i = Math.min(history.length - 1, Math.max(0, m.at + 7)), x = X(i), y = Y(history[i]);
       if (x < x0) continue;
       // the tag sits beside the peak, and never above the top of the chart
-      ctx.fillStyle = C.red; ctx.beginPath(); ctx.arc(x, y, L.u * .8, 0, Math.PI * 2); ctx.fill();
+      const tx = x - L.u * 1.6, ty = Math.max(y0 + fs * .4, y + L.u * .2);
       ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-      ctx.fillText(m.tag, x - L.u * 1.6, Math.max(y0 + fs * .4, y + L.u * .2));
+      ctx.lineJoin = 'round'; ctx.lineWidth = 3.5 * dpr; ctx.strokeStyle = C.paper; ctx.strokeText(m.tag, tx, ty);
+      ctx.fillStyle = C.red; ctx.fillText(m.tag, tx, ty);
+      ctx.beginPath(); ctx.arc(x, y, L.u * .8, 0, Math.PI * 2); ctx.fill();
     }
     ctx.beginPath(); ctx.arc(X(history.length - 1), Y(price), L.u * .9, 0, Math.PI * 2); ctx.fillStyle = C.red; ctx.fill();
   }
+  // A card flies in, pauses beside the monster long enough to read, then dives into its mouth.
+  function cardBox(c) {
+    const k = (t - c.t0) / c.dur, u = Math.max(0, (k - .8) / .2), [mx, my] = mouth();
+    const e = k < .55 ? .58 * ease(k / .55) : k < .8 ? .58 : .58 + .42 * u * u * u;
+    const w = Math.min(W * (L.port ? .36 : .2), 230 * dpr);
+    return {k, e, x: c.x0 + (mx - c.x0) * e, y: c.y0 + (my - c.y0) * e - Math.sin(Math.min(1, k) * Math.PI) * L.S * .4, w, h: w * .72, sc: 1 - .85 * u};
+  }
   function drawCard(c) {
-    const k = (t - c.t0) / c.dur, e = ease(k), [mx, my] = mouth();
-    const x = c.x0 + (mx - c.x0) * e, y = c.y0 + (my - c.y0) * e - Math.sin(k * Math.PI) * L.S * .4;
-    const w = Math.min(W * (L.port ? .42 : .2), 230 * dpr), h = w * .72, sc = 1 - .75 * Math.max(0, (k - .75) / .25);
+    const {e, x, y, w, h, sc} = cardBox(c);
     ctx.save(); ctx.translate(x, y); ctx.rotate(c.rot * (1 - e * .5)); ctx.scale(sc, sc);
     ctx.fillStyle = 'rgba(20,19,18,.12)'; ctx.fillRect(-w / 2 + 4 * dpr, -h / 2 + 5 * dpr, w, h);
     ctx.fillStyle = C.bone; ctx.strokeStyle = C.ink; ctx.lineWidth = Math.max(1.5 * dpr, w * .012);
@@ -239,12 +259,15 @@ function init(root) {
     ctx.save(); ctx.translate(x, y); ctx.strokeStyle = C.ink; ctx.lineWidth = Math.max(1.2 * dpr, s * .03); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     const face = (dx, dy, sc) => { ctx.save(); ctx.translate(dx, dy); ctx.scale(k * sc, k * sc); ctx.drawImage(spr, -spr.width / 2, -spr.height / 2); ctx.restore(); };
     if (kind === 'pug') {
-      // a pug in the bob: round face, folded ears, squashed nose
+      // a pug in the bob: folded ears, wrinkles, a black muzzle, big eyes, a little tongue
       ctx.fillStyle = C.hair; ctx.beginPath(); ctx.ellipse(0, -s * .05, s * .48, s * .44, 0, Math.PI, 0); ctx.lineTo(s * .5, s * .32); ctx.lineTo(-s * .5, s * .32); ctx.closePath(); ctx.fill(); ctx.stroke();
       ctx.fillStyle = '#d9b98a'; ctx.beginPath(); ctx.ellipse(0, s * .1, s * .3, s * .27, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = C.ink; for (const d of [-1, 1]) { ctx.beginPath(); ctx.arc(d * s * .12, s * .03, s * .045, 0, Math.PI * 2); ctx.fill(); }
-      ctx.beginPath(); ctx.ellipse(0, s * .16, s * .08, s * .05, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = C.hair; ctx.lineWidth = s * .05; ctx.beginPath(); ctx.moveTo(-s * .14, s * .25); ctx.quadraticCurveTo(0, s * .2, s * .14, s * .25); ctx.stroke();
+      ctx.fillStyle = C.ink; for (const d of [-1, 1]) { ctx.beginPath(); ctx.moveTo(d * s * .14, -s * .14); ctx.quadraticCurveTo(d * s * .34, -s * .2, d * s * .36, -s * .02); ctx.lineTo(d * s * .24, -s * .04); ctx.closePath(); ctx.fill(); }
+      ctx.lineWidth = Math.max(dpr, s * .022); for (const yy of [-.08, -.03]) { ctx.beginPath(); ctx.moveTo(-s * .08, s * yy); ctx.quadraticCurveTo(0, s * (yy - .03), s * .08, s * yy); ctx.stroke(); }
+      ctx.fillStyle = '#2a2320'; ctx.beginPath(); ctx.ellipse(0, s * .2, s * .17, s * .12, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = C.red; ctx.beginPath(); ctx.ellipse(0, s * .3, s * .04, s * .035, 0, 0, Math.PI * 2); ctx.fill();
+      for (const d of [-1, 1]) { ctx.fillStyle = C.ink; ctx.beginPath(); ctx.arc(d * s * .13, s * .05, s * .065, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = C.bone; ctx.beginPath(); ctx.arc(d * s * .13 + s * .02, s * .03, s * .02, 0, Math.PI * 2); ctx.fill(); }
+      ctx.fillStyle = '#6b5d52'; ctx.beginPath(); ctx.ellipse(0, s * .14, s * .05, s * .03, 0, 0, Math.PI * 2); ctx.fill();
     } else if (kind === 'podium') {
       face(0, -s * .12, .8);
       ctx.fillStyle = C.bone; ctx.beginPath(); ctx.moveTo(-s * .3, s * .12); ctx.lineTo(s * .3, s * .12); ctx.lineTo(s * .24, s * .45); ctx.lineTo(-s * .24, s * .45); ctx.closePath(); ctx.fill(); ctx.stroke();
@@ -252,10 +275,15 @@ function init(root) {
       ctx.strokeStyle = C.ink; for (const d of [-1, 1]) { ctx.beginPath(); ctx.moveTo(d * s * .5, -s * .45); ctx.lineTo(d * s * .5, s * .45); ctx.stroke(); ctx.fillStyle = C.red; ctx.fillRect(d * s * .5 + (d < 0 ? 0 : -s * .16), -s * .45, s * .16, s * .1); }
     } else if (kind === 'donkey') {
       face(s * .26, s * .02, .7);
-      ctx.fillStyle = '#b9ae98';
-      ctx.beginPath(); ctx.ellipse(-s * .22, s * .02, s * .2, s * .3, -.2, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      for (const d of [-1, 1]) { ctx.beginPath(); ctx.ellipse(-s * .22 + d * s * .1, -s * .34, s * .05, s * .16, d * .3, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
-      ctx.fillStyle = C.ink; ctx.beginPath(); ctx.arc(-s * .28, -s * .02, s * .025, 0, Math.PI * 2); ctx.fill();
+      // a donkey, face on: long head, tall ears, pale muzzle, forelock
+      const cx = -s * .2; ctx.fillStyle = '#9d9281';
+      for (const d of [-1, 1]) { ctx.beginPath(); ctx.ellipse(cx + d * s * .09, -s * .33, s * .055, s * .15, d * .25, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+      ctx.beginPath(); ctx.moveTo(cx - s * .13, -s * .2); ctx.quadraticCurveTo(cx, -s * .3, cx + s * .13, -s * .2); ctx.lineTo(cx + s * .12, s * .12);
+      ctx.quadraticCurveTo(cx + s * .17, s * .36, cx, s * .38); ctx.quadraticCurveTo(cx - s * .17, s * .36, cx - s * .12, s * .12); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#e2dacb'; ctx.beginPath(); ctx.moveTo(cx - s * .125, s * .14); ctx.lineTo(cx + s * .125, s * .14);
+      ctx.quadraticCurveTo(cx + s * .17, s * .36, cx, s * .37); ctx.quadraticCurveTo(cx - s * .17, s * .36, cx - s * .125, s * .14); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = C.ink; for (const d of [-1, 1]) { ctx.beginPath(); ctx.ellipse(cx + d * s * .05, s * .27, s * .018, s * .03, 0, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(cx + d * s * .08, -s * .06, s * .025, 0, Math.PI * 2); ctx.fill(); }
+      ctx.beginPath(); ctx.moveTo(cx - s * .05, -s * .26); ctx.lineTo(cx, -s * .34); ctx.lineTo(cx + s * .05, -s * .26); ctx.closePath(); ctx.fill();
     } else if (kind === 'grandma') {
       face(s * .24, s * .02, .7);
       ctx.fillStyle = '#dcd6ca'; ctx.beginPath(); ctx.arc(-s * .24, -s * .05, s * .2, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
@@ -287,6 +315,7 @@ function init(root) {
   let down = null;
   canvas.addEventListener('pointerdown', e => { down = {x: e.clientX, y: e.clientY}; });
   canvas.addEventListener('pointercancel', () => { down = null; });
+  canvas.addEventListener('mousedown', e => e.preventDefault());
   canvas.addEventListener('pointerup', e => {
     if (!down) return; const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y); down = null;
     if (moved > 12 || !L) return;
@@ -303,7 +332,11 @@ function init(root) {
     say('Pop one. It makes another.', 'pop');
   }
   function tap(px, py) {
-    for (const c of cards) { const k = (t - c.t0) / c.dur; if (k > .9) continue; c.t0 = t - c.dur * .9; c.dur = c.dur; return; }
+    for (const c of cards) {
+      const b = cardBox(c); if (b.k > .8) continue;
+      const pad = 12 * dpr;
+      if (Math.abs(px - b.x) < b.w * b.sc / 2 + pad && Math.abs(py - b.y) < b.h * b.sc / 2 + pad) { c.t0 = t - .8 * .6; c.dur = .6; return; } // straight into the dive
+    }
     if (Math.hypot(px - L.mx, py - L.my) < L.S * 1.3) { shake = t; chomp = t; gaze = 1; poked++; say(poked > 2 ? 'Knock knock. Still nobody.' : 'Knock knock. Nobody answers.', poked > 2 ? 'poke2' : 'poke'); return; }
     let best = null, bd = 1e9;
     for (const c of copies) { const s = L.slots[c.slot], d = Math.hypot(px - s.x, py - s.y); if (d < bd) { bd = d; best = c; } }
@@ -322,7 +355,7 @@ function init(root) {
   function wake() { if (!raf && visible && !document.hidden) { last = 0; raf = requestAnimationFrame(frame); } }
   new IntersectionObserver(es => { visible = es[es.length - 1].isIntersecting; if (visible) wake(); }, {threshold: [0, .2]}).observe(canvas);
   document.addEventListener('visibilitychange', wake);
-  new ResizeObserver(() => { if (layout()) draw(performance.now()); }).observe(canvas);
+  new ResizeObserver(() => { if (layout()) { draw(performance.now()); wake(); } }).observe(canvas);
   (document.fonts?.ready || Promise.resolve()).then(() => draw(performance.now()));
   window.__headless = {get t() { return t; }, viral: () => viral(true), get copies() { return copies.length; }};
 }
