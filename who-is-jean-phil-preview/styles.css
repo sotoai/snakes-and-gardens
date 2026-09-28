@@ -969,3 +969,12 @@ html.snap{scroll-padding-top:0}
 @media (max-height:720px){.tk-canvas{height:54svh}.tk-cap{min-height:2.2em;font-size:1.05rem}}
 @media (max-width:899px),(max-aspect-ratio:1/1){ .tk-canvas{height:min(63svh,600px)} }
 @media (max-height:720px){ .tk-canvas{height:56svh} }
+/* The headless machine: an illustration you can poke */
+.headless.frame{background:var(--paper);color:var(--ink-p)}
+.headless .frame-head{max-width:18ch;margin-bottom:.25rem}
+.headless .frame-sub{color:var(--mute-p);margin-bottom:.4rem}
+@media (min-width:900px) and (min-aspect-ratio:1/1){
+  .headless .frame-head{max-width:26ch}
+  .headless .tk-canvas{height:min(56svh,580px)}
+}
+@media (min-width:900px) and (min-aspect-ratio:1/1) and (max-height:780px){ .headless .tk-canvas{height:50svh} .headless .frame-head{font-size:clamp(1.6rem,1rem + 2vw,2.4rem)} }

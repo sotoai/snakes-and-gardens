@@ -2,13 +2,12 @@
 // JEANPHIL coins. Drawn in 3D on a canvas so it can turn all the way round. It spins on its own;
 // a horizontal swipe or drag (or a sideways trackpad scroll) spins it by hand. No UI, on purpose.
 
-const canvas = document.querySelector('canvas.monster');
+const canvas = typeof document !== 'undefined' ? document.querySelector('canvas.monster') : null;
 if (canvas) init(canvas);
 
-function init(canvas) {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+// The drawing on its own, so other scenes can use the monster too.
+// makeMonster(ctx) returns render({cx, cy, S, LW, yaw, t, open, gaze, shadow: {y, bob}}).
+export function makeMonster(ctx, reduced = false) {
   const D = Math.PI / 180;
   const C = {
     red: '#fd0001', shade: '#c9000c', bump: '#d4000b', hair: '#e8cd8c', hairLine: '#b8975a',
@@ -131,8 +130,7 @@ function init(canvas) {
   for (let i = 0; i < 7; i++) tentacles.push({lat: -60 - (i % 3) * 7, lon: -180 + i * 51.4 + 20, len: .5 + (i % 3) * .14, phase: i * 2.1, curl: i % 2 ? 1 : -1});
 
   // ---- camera ----
-  let W = 0, H = 0, S = 0, cx = 0, cy = 0, dpr = 1;
-  let yaw = 0.5, cyaw = 1, syaw = 0;
+  let S = 0, cx = 0, cy = 0, LW = 2, gaze = 0, blinkAt = 2.5, cyaw = 1, syaw = 0;
   const pitch = 0.2, cp = Math.cos(pitch), sp = Math.sin(pitch);
   const cam = p => { // world -> camera (unit sphere); y up, z toward the viewer
     const x1 = p[0] * cyaw + p[2] * syaw, z1 = -p[0] * syaw + p[2] * cyaw, y1 = p[1];
@@ -273,9 +271,79 @@ function init(canvas) {
     tube(pts, .1, .02, C.tent);
   }
 
+  function render(o) {
+    S = o.S; cx = o.cx; cy = o.cy; LW = o.LW; gaze = o.gaze || 0; cyaw = Math.cos(o.yaw); syaw = Math.sin(o.yaw);
+    const t = o.t, open = o.open ?? .95;
+    if (o.shadow) {
+      ctx.beginPath(); ctx.ellipse(cx, o.shadow.y, S * (.78 - (o.shadow.bob || 0) * 1.2), S * .1, 0, 0, 2 * Math.PI);
+      ctx.fillStyle = C.shadow; ctx.fill();
+    }
+    const gs = stalks.map(s => ({s, g: stalkGeom(s, t)}));
+    tentacles.forEach(tn => drawTentacle(tn, t));
+    gs.filter(o => o.g.depth < 0).sort((a, b) => a.g.depth - b.g.depth).forEach(o => drawStalk(o.s, o.g, t));
+
+    // body, shaded like the flat two-tone symbol
+    ctx.beginPath(); ctx.arc(cx, cy, S, 0, 2 * Math.PI); ctx.fillStyle = C.red; ctx.fill();
+    ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, S, 0, 2 * Math.PI); ctx.clip();
+    ctx.beginPath(); ctx.arc(cx, cy, S * 1.02, 0, 2 * Math.PI); ctx.arc(cx - S * .16, cy - S * .2, S * 1.02, 0, 2 * Math.PI);
+    ctx.fillStyle = C.shade; ctx.fill('evenodd');
+    bumps.forEach(b => surf(b, null, C.bump, LW * .7));
+    surf(hairCap, C.hair, C.ink, LW);
+
+    // mouth, tongue, teeth
+    const mp = mouthPoly(open);
+    if (surf(mp, C.mouth, null)) {
+      ctx.save(); ctx.clip();
+      surf(ccw(ring(-13 - 34 * open, 0, 24, 9, 24), -13 - 34 * open, 0), C.tongue, null);
+      teeth(open).forEach(tp => surf(tp, C.bone, C.ink, LW * .7));
+      ctx.restore();
+      line(mp.map(cam), true, C.ink, LW * 1.1);
+    }
+    // the big eye, with a blink now and then
+    if (surf(eyeRing, C.bone, null)) {
+      surf(slit, C.ink, null);
+      if (!reduced && t > blinkAt) { const k = (t - blinkAt) / .22; if (k > 1) blinkAt = t + 2.5 + ((t * 7.3) % 4); else lid(1 - Math.abs(k * 2 - 1)); }
+      line(eyeRing.map(cam), true, C.ink, LW);
+    }
+    const sc = stache.map(cam); // blond, like the hair, outlined in ink
+    line(sc, false, C.ink, S * .075 + LW * 1.8);
+    line(sc, false, C.hair, S * .075);
+    bodyBits.forEach(b => {
+      const n = sph(b.lat, b.lon);
+      if (cam(n)[2] < .08) return;
+      if (b.kind === 'coin') coin(add(n, n, .01), n, .15);
+      else {
+        const rr = ccw(ring(b.lat, b.lon, 7, 7, 18), b.lat, b.lon);
+        surf(rr, C.bone, C.ink, LW * .7);
+        surf(ccw(ring(b.lat, b.lon, 2.8, 3.2, 12), b.lat, b.lon), C.ink, null);
+      }
+    });
+    ctx.restore();
+    ctx.beginPath(); ctx.arc(cx, cy, S, 0, 2 * Math.PI); ctx.strokeStyle = C.ink; ctx.lineWidth = LW * 1.2; ctx.stroke();
+
+    gs.filter(o => o.g.depth >= 0).sort((a, b) => a.g.depth - b.g.depth).forEach(o => drawStalk(o.s, o.g, t));
+  }
+  // Eyelid: the top of the big eye, closed by k (0..1).
+  function lid(k) {
+    const pts = [], r = EYE.r, cut = r - 2 * r * k;
+    const a0 = Math.asin(Math.max(-1, Math.min(1, cut / r)));
+    for (let a = a0; a <= Math.PI - a0 + 1e-6; a += (Math.PI - 2 * a0) / 16 || 1) pts.push(offs(EYE.lat, EYE.lon, r * Math.cos(a), r * Math.sin(a)));
+    surf(ccw(pts, EYE.lat, EYE.lon), C.red, C.ink, LW * .8);
+  }
+
+  return render;
+}
+
+function init(canvas) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const monster = makeMonster(ctx, reduced);
+  let W = 0, H = 0, S = 0, cx = 0, cy = 0, dpr = 1, yaw = 0.5, LW = 2;
+
   // ---- state and input ----
   const IDLE = reduced ? 0 : .42; // radians a second, about one turn every 15 s
-  let vel = IDLE, dir = 1, dragging = false, lastX = 0, lastT = 0, sample = 0, wheelUntil = 0, gaze = 0, blinkAt = 2.5, LW = 2;
+  let vel = IDLE, dir = 1, dragging = false, lastX = 0, lastT = 0, sample = 0, wheelUntil = 0, gaze = 0;
   canvas.style.touchAction = 'pan-y';
   canvas.addEventListener('pointerdown', e => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
@@ -341,68 +409,11 @@ function init(canvas) {
 
   function draw(t) {
     if (!W) return;
-    cyaw = Math.cos(yaw); syaw = Math.sin(yaw);
     const bob = reduced ? 0 : Math.sin(t * 1.3) * .045;
-    cy = H * .49 - bob * S;
     const open = (reduced ? .95 : .9 + .07 * Math.sin(t * .8)) + Math.min(.22, Math.abs(vel) * .025);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, W, H);
-
-    // shadow on the ground
-    ctx.beginPath(); ctx.ellipse(cx, H * .49 + S * 1.93, S * (.78 - bob * 1.2), S * .1, 0, 0, 2 * Math.PI);
-    ctx.fillStyle = C.shadow; ctx.fill();
-
-    const gs = stalks.map(s => ({s, g: stalkGeom(s, t)}));
-    tentacles.forEach(tn => drawTentacle(tn, t));
-    gs.filter(o => o.g.depth < 0).sort((a, b) => a.g.depth - b.g.depth).forEach(o => drawStalk(o.s, o.g, t));
-
-    // body, shaded like the flat two-tone symbol
-    ctx.beginPath(); ctx.arc(cx, cy, S, 0, 2 * Math.PI); ctx.fillStyle = C.red; ctx.fill();
-    ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, S, 0, 2 * Math.PI); ctx.clip();
-    ctx.beginPath(); ctx.arc(cx, cy, S * 1.02, 0, 2 * Math.PI); ctx.arc(cx - S * .16, cy - S * .2, S * 1.02, 0, 2 * Math.PI);
-    ctx.fillStyle = C.shade; ctx.fill('evenodd');
-    bumps.forEach(b => surf(b, null, C.bump, LW * .7));
-    surf(hairCap, C.hair, C.ink, LW);
-
-    // mouth, tongue, teeth
-    const mp = mouthPoly(open);
-    if (surf(mp, C.mouth, null)) {
-      ctx.save(); ctx.clip();
-      surf(ccw(ring(-13 - 34 * open, 0, 24, 9, 24), -13 - 34 * open, 0), C.tongue, null);
-      teeth(open).forEach(tp => surf(tp, C.bone, C.ink, LW * .7));
-      ctx.restore();
-      line(mp.map(cam), true, C.ink, LW * 1.1);
-    }
-    // the big eye, with a blink now and then
-    if (surf(eyeRing, C.bone, null)) {
-      surf(slit, C.ink, null);
-      if (!reduced && t > blinkAt) { const k = (t - blinkAt) / .22; if (k > 1) blinkAt = t + 2.5 + ((t * 7.3) % 4); else lid(1 - Math.abs(k * 2 - 1)); }
-      line(eyeRing.map(cam), true, C.ink, LW);
-    }
-    const sc = stache.map(cam); // blond, like the hair, outlined in ink
-    line(sc, false, C.ink, S * .075 + LW * 1.8);
-    line(sc, false, C.hair, S * .075);
-    bodyBits.forEach(b => {
-      const n = sph(b.lat, b.lon);
-      if (cam(n)[2] < .08) return;
-      if (b.kind === 'coin') coin(add(n, n, .01), n, .15);
-      else {
-        const rr = ccw(ring(b.lat, b.lon, 7, 7, 18), b.lat, b.lon);
-        surf(rr, C.bone, C.ink, LW * .7);
-        surf(ccw(ring(b.lat, b.lon, 2.8, 3.2, 12), b.lat, b.lon), C.ink, null);
-      }
-    });
-    ctx.restore();
-    ctx.beginPath(); ctx.arc(cx, cy, S, 0, 2 * Math.PI); ctx.strokeStyle = C.ink; ctx.lineWidth = LW * 1.2; ctx.stroke();
-
-    gs.filter(o => o.g.depth >= 0).sort((a, b) => a.g.depth - b.g.depth).forEach(o => drawStalk(o.s, o.g, t));
-  }
-  // Eyelid: the top of the big eye, closed by k (0..1).
-  function lid(k) {
-    const pts = [], r = EYE.r, cut = r - 2 * r * k;
-    const a0 = Math.asin(Math.max(-1, Math.min(1, cut / r)));
-    for (let a = a0; a <= Math.PI - a0 + 1e-6; a += (Math.PI - 2 * a0) / 16 || 1) pts.push(offs(EYE.lat, EYE.lon, r * Math.cos(a), r * Math.sin(a)));
-    surf(ccw(pts, EYE.lat, EYE.lon), C.red, C.ink, LW * .8);
+    monster({cx, cy: H * .49 - bob * S, S, LW, yaw, t, open, gaze, shadow: {y: H * .49 + S * 1.93, bob}});
   }
 
   canvas.__monster = {spin: a => { yaw = a; draw(performance.now() / 1000); }, get yaw() { return yaw; }};
