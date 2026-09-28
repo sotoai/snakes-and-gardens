@@ -802,3 +802,12 @@ a.xref:hover{text-decoration-color:currentColor}
 .slide--crowd .slide-in{position:relative;z-index:1}
 .market-price .jp-coin{display:inline-block!important;max-width:none}
 .market-change{white-space:nowrap}
+
+/* The Terminator, rescheduled */
+.slide--terminator{background:#f20000!important;display:grid!important;align-content:center;justify-items:center;row-gap:1.2rem}
+.slide--terminator .term-art{width:min(80vw,50svh,560px);height:auto;display:block}
+@media (min-width:900px) and (min-aspect-ratio:1/1){
+  .slide--terminator{grid-template-columns:auto minmax(0,30rem);column-gap:4vw;justify-content:center;align-items:center}
+  .slide--terminator .term-art{width:min(42vw,72svh)}
+  .slide--terminator .slide-in{margin:0}
+}
