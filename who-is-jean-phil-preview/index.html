@@ -412,36 +412,9 @@
   </div>
 </section>
 
-<section class="sim-section frame" id="sim" aria-labelledby="sim-h">
-  <p class="frame-head" id="sim-h">Try to stamp him out.</p>
-  <p class="frame-sub mono">You're the moderator. In this toy version, a coin keeps paying for new faces. Can you delete them faster than they come back?</p>
-  <div class="sim">
-    <canvas id="sim-canvas" aria-label="Simulation of copies spreading through a feed" role="img"></canvas>
-    <div class="sim-panel">
-      <p class="sim-status" id="sim-status" aria-live="polite">He's loose.</p>
-      <dl class="sim-stats mono">
-        <div><dt>Originals left</dt><dd id="sim-orig">100%</dd></div>
-        <div><dt>Jean Phils</dt><dd id="sim-copies">3</dd></div>
-        <div><dt>Remix attempts</dt><dd id="sim-spawn">0.12</dd></div>
-        <div><dt>Tick</dt><dd id="sim-tick">0</dd></div>
-      </dl>
-      <label class="sim-control mono" for="sim-takedown">Takedown rate <output id="sim-takedown-out">0.06</output></label>
-      <input type="range" id="sim-takedown" min="0" max="0.4" step="0.01" value="0.06">
-      <label class="sim-control mono" for="sim-rate">Remix rate <output id="sim-rate-out">0.12</output></label>
-      <input type="range" id="sim-rate" min="0.02" max="0.4" step="0.01" value="0.12">
-      <div class="sim-buttons">
-        <button type="button" class="mono" id="sim-adapt" aria-pressed="false">Let him adapt</button>
-        <button type="button" class="mono" id="sim-run" aria-pressed="true">Pause</button>
-        <button type="button" class="mono" id="sim-reset">Reset</button>
-      </div>
-      <p class="fine mono">A toy model of the paper's persistence rule, not a forecast. With adaptation on, a suppressed character raises its remix rate, and a wiped-out one comes back as a new face.</p>
-    </div>
-  </div>
-</section>
-
 <section class="slide">
   <div class="slide-in">
-    <p>Lost? That's the paper's survival rule: an agent persists when copies appear faster than they're taken down. Even the authors don't promise a fix: <q>We do not claim that harmful [self-sovereign agents] can be fully prevented.</q></p>
+    <p>The paper's survival rule is simple: an agent persists when copies appear faster than they're taken down. Even the authors don't promise a fix: <q>We do not claim that harmful [self-sovereign agents] can be fully prevented.</q></p>
     <p>So who drives it, and who pays its bills?</p>
   </div>
 </section>
