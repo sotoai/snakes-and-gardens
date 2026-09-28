@@ -769,34 +769,60 @@ const snapshot = fetch('assets/data/market-snapshot.json').then(r => r.json()).c
   new IntersectionObserver(([e]) => { if (e.isIntersecting && e.intersectionRatio > .5) play(); }, {threshold: [0, .5, .8]}).observe(grid);
 })();
 
-/* ---------------- The machine: four parts, then take the people out ---------------- */
+/* ---------------- The machine: try to switch it off ---------------- */
 (function machine() {
   const fig = $('.mach'); if (!fig) return;
   const data = JSON.parse($('#mach-data').textContent);
   const stations = $$('.mach-st', fig), card = $('.mach-text', fig), kick = $('.mach-kick', fig);
-  const toggle = $('.mach-toggle', fig), who = $('.mach-who', fig);
-  const order = ['face', 'attention', 'coin', 'copies'];
-  let mode = 'people', sel = 'face', touched = false, timers = [];
+  const back = $('.mach-toggle', fig), status = $('.mach-who', fig);
   const q = t => t.replace(/“([^”]+)”/g, '<q>$1</q>');
-  function render() {
-    fig.dataset.mode = mode;
-    stations.forEach(b => { const on = b.dataset.st === sel; b.classList.toggle('sel', on); b.setAttribute('aria-pressed', on); });
-    kick.textContent = mode === 'people' ? 'Today · people' : (sel === 'attention' ? "The paper's version · still you" : "The paper's version · itself");
-    card.innerHTML = q(data[sel][mode === 'people' ? 'people' : 'auto']);
-    who.textContent = mode === 'people' ? 'People' : 'Itself.';
-    toggle.textContent = mode === 'people' ? 'Take the people out' : 'Put the people back';
-    toggle.setAttribute('aria-pressed', mode !== 'people');
+  let touched = false, timers = [], stopped = false;
+  const later = (fn, ms) => timers.push(setTimeout(fn, ms));
+  function say(key) { kick.textContent = data[key].kick; card.innerHTML = q(data[key].text); }
+  function setStatus(word) { status.textContent = word; }
+  // Taking out any part but the audience: it goes dark, then comes back.
+  function kill(b) {
+    const st = b.dataset.st;
+    if (st === 'attention') return lookAway(b);
+    if (stopped || b.classList.contains('dead')) return;
+    b.classList.remove('reborn'); b.classList.add('dead');
+    say(st); setStatus('down');
+    setTimeout(() => {
+      if (stopped) return;
+      b.classList.remove('dead'); void b.offsetWidth; b.classList.add('reborn');
+      const tag = $('.mach-tag', b); if (tag) tag.textContent = data.tags[st] || '';
+      b.dataset.reborn = '';
+      setStatus('running');
+    }, 1100);
+  }
+  function lookAway(b) {
+    if (stopped) return;
+    stopped = true; fig.dataset.state = 'stopped';
+    stations.forEach(x => x.classList.remove('reborn'));
+    b.classList.add('dead');
+    say('attention'); setStatus('stopped.');
+    back.hidden = false;
+  }
+  function lookBack() {
+    stopped = false; fig.dataset.state = 'running';
+    stations.forEach(x => x.classList.remove('dead'));
+    say('back'); setStatus('running');
+    back.hidden = true;
   }
   const stop = () => { touched = true; timers.forEach(clearTimeout); timers = []; };
-  stations.forEach(b => b.addEventListener('click', () => { stop(); sel = b.dataset.st; render(); }));
-  toggle.addEventListener('click', () => { stop(); mode = mode === 'people' ? 'auto' : 'people'; render(); });
-  render();
-  // Walk through it once on arrival (and in the screen recording); any tap takes over.
+  stations.forEach(b => b.addEventListener('click', () => { stop(); kill(b); }));
+  back.addEventListener('click', () => { stop(); lookBack(); });
+  say('intro');
+  // Play it once on arrival (and in the screen recording): kill three parts, then look away. Any tap takes over.
   let played = false;
   function play() {
-    if (played || touched || reduced) return; played = true;
-    const steps = [...order.map(st => () => { sel = st; mode = 'people'; }), () => { mode = 'auto'; sel = 'face'; }, ...order.slice(1).map(st => () => { sel = st; })];
-    steps.forEach((fn, k) => timers.push(setTimeout(() => { if (!touched) { fn(); render(); } }, 900 + k * 2600)));
+    if (played || touched || reduced || !state.autoplay) return; played = true;
+    const st = k => stations.find(b => b.dataset.st === k);
+    // Long enough to read each card: about 5 s for the intro, 6 s for each piece of evidence.
+    ['face', 'coin', 'copies', 'attention'].forEach((k, i) => later(() => { if (!touched && state.autoplay) kill(st(k)); }, 5000 + i * 6000));
   }
-  new IntersectionObserver(([e]) => { if (e.isIntersecting && e.intersectionRatio > .6) play(); }, {threshold: [0, .6, .9]}).observe(fig);
+  new IntersectionObserver(([e]) => {
+    if (e.isIntersecting && e.intersectionRatio > .6) play();
+    else if (!e.isIntersecting && !touched) { timers.forEach(clearTimeout); timers = []; played = false; } // replay on return
+  }, {threshold: [0, .6, .9]}).observe(fig);
 })();

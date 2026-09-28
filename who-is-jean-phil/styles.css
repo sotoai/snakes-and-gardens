@@ -907,3 +907,47 @@ a.xref:hover{text-decoration-color:currentColor}
 .mach[data-mode="auto"] .mach-except{visibility:visible}
 .mach-quote{visibility:hidden;transition:opacity .6s,visibility .6s}
 .mach[data-mode="auto"] .mach-quote{visibility:visible}
+/* The Terminator, rescheduled: a many-eyed monster you can spin */
+.slide--monster{display:grid!important;align-content:center;justify-items:center;row-gap:.6rem}
+.monster-fig{margin:0;display:grid;justify-items:center;gap:.2rem}
+.monster{display:block;width:min(78vw,calc(58svh * .75),460px);aspect-ratio:3/4;height:auto;cursor:grab;touch-action:pan-y;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+.monster:active{cursor:grabbing}
+.monster-credit{font-size:.58rem;letter-spacing:.06em;color:var(--mute-p)}
+.monster-credit a{color:inherit;text-decoration-color:rgba(20,19,18,.3)}
+.slide--monster .slide-in{text-align:center}
+@media (min-width:900px) and (min-aspect-ratio:1/1){
+  .slide--monster{grid-template-columns:auto minmax(0,30rem);column-gap:5vw;justify-content:center;align-items:center}
+  .slide--monster .monster{width:min(36vw,calc(80svh * .75),520px)}
+  .slide--monster .slide-in{margin:0;text-align:left}
+}
+.monster{width:min(92vw,calc(60svh * .75),480px)}
+/* The machine, v2: try to switch it off */
+.mach .mach-quote{opacity:1;visibility:visible}
+.mach-who{font-style:italic;transition:color .4s}
+.mach[data-state="running"] .mach-loop{color:var(--blond)}
+.mach[data-state="running"] .mach-arcs path{stroke-dasharray:5 7;animation:mach-flow 1.1s linear infinite}
+.mach[data-state="stopped"] .mach-loop{color:rgba(242,236,225,.16)}
+.mach[data-state="stopped"] .mach-who{color:var(--red)}
+.mach[data-state="stopped"] .mach-st{background:#161412}
+.mach[data-state="stopped"] .mach-st .mach-ico,.mach[data-state="stopped"] .mach-st .mach-lab{opacity:.3;filter:grayscale(1)}
+.mach-st .mach-ico,.mach-st .mach-lab{transition:opacity .3s,filter .3s}
+.mach-st.dead{transform:translate(-50%,-50%) scale(.86);border-color:rgba(253,0,1,.6)}
+.mach-st.dead .mach-ico,.mach-st.dead .mach-lab{opacity:.22;filter:grayscale(1)}
+.mach-st::after{content:"";position:absolute;inset:22%;pointer-events:none;opacity:0;transition:opacity .15s;background:linear-gradient(45deg,transparent 46.5%,var(--red) 46.5% 53.5%,transparent 53.5%),linear-gradient(-45deg,transparent 46.5%,var(--red) 46.5% 53.5%,transparent 53.5%)}
+.mach-st.dead::after{opacity:1}
+@keyframes mach-pop{0%{transform:translate(-50%,-50%) scale(.55)}60%{transform:translate(-50%,-50%) scale(1.14)}100%{transform:translate(-50%,-50%) scale(1)}}
+@keyframes mach-ring{0%{box-shadow:0 0 0 0 rgba(232,205,140,.6)}100%{box-shadow:0 0 0 18px rgba(232,205,140,0)}}
+.mach-st.reborn{animation:mach-pop .5s var(--ease),mach-ring .9s ease-out;border-color:var(--blond)}
+.mach-tag{position:absolute;right:-8%;top:-4%;background:var(--blond);color:var(--ink);font-size:.56rem;letter-spacing:.04em;text-transform:uppercase;padding:.18rem .45rem;border-radius:999px;white-space:nowrap;opacity:0;transform:scale(.6);transition:opacity .3s .15s,transform .3s .15s var(--ease)}
+.mach-st[data-reborn] .mach-tag:not(:empty){opacity:1;transform:none}
+.mach-st[data-st="face"][data-reborn] svg{--jp-hair:#7a5634}
+.mach-card .xref{color:inherit}
+@media (prefers-reduced-motion:reduce){.mach-st.reborn{animation:none}.mach[data-state="running"] .mach-arcs path{animation:none}}
+.mach-toggle[hidden]{display:inline-block;visibility:hidden}
+@media (max-width:899px),(max-aspect-ratio:1/1){
+  .slide--monster .monster{width:min(88vw,calc(50svh * .75),440px)}
+  .slide--monster .slide-in p{margin-top:.4rem}
+}
+@media (max-height:720px) and (max-aspect-ratio:1/1){.slide--monster .monster{width:calc(42svh * .75)}}
+/* frames snap flush to the top edge; the nav floats over them (no strip of the previous frame) */
+html.snap{scroll-padding-top:0}
