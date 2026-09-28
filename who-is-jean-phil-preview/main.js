@@ -29,7 +29,7 @@ onScroll();
 const revealIO = new IntersectionObserver(entries => {
   for (const e of entries) if (e.isIntersecting) { e.target.classList.add('in'); revealIO.unobserve(e.target); }
 }, {threshold: .25});
-$$('.reel-card, .reach, .offspring, .poles, .four--blank, .slide--tako').forEach(el => revealIO.observe(el));
+$$('.reel-card, .reach, .offspring, .poles, .four--blank, .slide--tako, .paths').forEach(el => revealIO.observe(el));
 
 /* ---------------- Snapping: one frame per swipe for the story; the notes scroll freely ---------------- */
 const root = document.documentElement;
@@ -767,4 +767,36 @@ const snapshot = fetch('../who-is-jean-phil/assets/data/market-snapshot.json').t
     setTimeout(() => { readout.textContent = 'The first six arrived within two hours. Tap a coin.'; }, 300 + kids.length * 190 + 200);
   }
   new IntersectionObserver(([e]) => { if (e.isIntersecting && e.intersectionRatio > .5) play(); }, {threshold: [0, .5, .8]}).observe(grid);
+})();
+
+/* ---------------- The machine: four parts, then take the people out ---------------- */
+(function machine() {
+  const fig = $('.mach'); if (!fig) return;
+  const data = JSON.parse($('#mach-data').textContent);
+  const stations = $$('.mach-st', fig), card = $('.mach-text', fig), kick = $('.mach-kick', fig);
+  const toggle = $('.mach-toggle', fig), who = $('.mach-who', fig);
+  const order = ['face', 'attention', 'coin', 'copies'];
+  let mode = 'people', sel = 'face', touched = false, timers = [];
+  const q = t => t.replace(/“([^”]+)”/g, '<q>$1</q>');
+  function render() {
+    fig.dataset.mode = mode;
+    stations.forEach(b => { const on = b.dataset.st === sel; b.classList.toggle('sel', on); b.setAttribute('aria-pressed', on); });
+    kick.textContent = mode === 'people' ? 'Today · people' : (sel === 'attention' ? "The paper's version · still you" : "The paper's version · itself");
+    card.innerHTML = q(data[sel][mode === 'people' ? 'people' : 'auto']);
+    who.textContent = mode === 'people' ? 'People' : 'Itself.';
+    toggle.textContent = mode === 'people' ? 'Take the people out' : 'Put the people back';
+    toggle.setAttribute('aria-pressed', mode !== 'people');
+  }
+  const stop = () => { touched = true; timers.forEach(clearTimeout); timers = []; };
+  stations.forEach(b => b.addEventListener('click', () => { stop(); sel = b.dataset.st; render(); }));
+  toggle.addEventListener('click', () => { stop(); mode = mode === 'people' ? 'auto' : 'people'; render(); });
+  render();
+  // Walk through it once on arrival (and in the screen recording); any tap takes over.
+  let played = false;
+  function play() {
+    if (played || touched || reduced) return; played = true;
+    const steps = [...order.map(st => () => { sel = st; mode = 'people'; }), () => { mode = 'auto'; sel = 'face'; }, ...order.slice(1).map(st => () => { sel = st; })];
+    steps.forEach((fn, k) => timers.push(setTimeout(() => { if (!touched) { fn(); render(); } }, 900 + k * 2600)));
+  }
+  new IntersectionObserver(([e]) => { if (e.isIntersecting && e.intersectionRatio > .6) play(); }, {threshold: [0, .6, .9]}).observe(fig);
 })();

@@ -386,43 +386,50 @@
 
 <section class="slide">
   <div class="slide-in">
-    <p><a class="xref" href="https://www.tiktok.com/@ty.farrago" target="_blank" rel="noopener">Ty</a>'s move has a name in marketing: trend jacking, riding a wave someone else made. It got him 600,000-plus plays. <a class="xref" href="https://www.tiktok.com/@jean_philanthrope" target="_blank" rel="noopener">Jean Phil</a> points at something newer: making the wave.</p>
-    <p>A brand-new character, a coin attached, and a setup that could, in principle, run itself.</p>
+    <p><a class="xref" href="https://www.tiktok.com/@ty.farrago" target="_blank" rel="noopener">Ty</a>'s move has a name in marketing: trend jacking, riding a wave someone else made. <a class="xref" href="https://www.tiktok.com/@jean_philanthrope" target="_blank" rel="noopener">Jean Phil</a> points at something newer: making the wave, with a face, a coin and copies that could, in principle, keep going without anyone.</p>
   </div>
 </section>
 
-<section class="slide">
-  <div class="slide-in">
-    <p>It's already a format. By September 24, <a class="xref" href="https://trending.knowyourmeme.com/editorials/guides/who-is-jean-philanthrope-and-is-he-ai-the-mysterious-frenchman-named-jean-phil-shadowboxing-across-social-media-explained" target="_blank" rel="noopener">Know Your Meme</a> had reported a second face: Archibald Brown, <q>an English counterpart and rival to Jean Phil,</q> with a meme coin based on him. Same makers?</p>
-    <p>Unknown, and beside the point: the recipe is public.</p>
-  </div>
+<section class="machine frame" id="machine-graphic" aria-labelledby="mach-h">
+  <p class="frame-head" id="mach-h">How the machine runs</p>
+  <p class="frame-sub">Tap a part. Then take the people out.</p>
+  <figure class="mach" data-mode="people">
+    <div class="mach-ring">
+      <svg class="mach-loop" viewBox="0 0 300 300" aria-hidden="true" focusable="false">
+        <defs><marker id="mach-arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+        <g class="mach-arcs" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+          <path d="M196,52 A112,112 0 0 1 248,104" marker-end="url(#mach-arrow)"/>
+          <path d="M248,196 A112,112 0 0 1 196,248" marker-end="url(#mach-arrow)"/>
+          <path d="M104,248 A112,112 0 0 1 52,196" marker-end="url(#mach-arrow)"/>
+          <path d="M52,104 A112,112 0 0 1 104,52" marker-end="url(#mach-arrow)"/>
+        </g>
+      </svg>
+      <button type="button" class="mach-st" data-st="face" style="--x:50%;--y:12%"><span class="mach-ico"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#jp-mark"/></svg></span><span class="mach-lab mono">The face</span><span class="mach-who-badge" aria-hidden="true"></span></button>
+      <button type="button" class="mach-st" data-st="attention" style="--x:88%;--y:50%"><span class="mach-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/></svg></span><span class="mach-lab mono">The attention</span><span class="mach-who-badge" aria-hidden="true"></span></button>
+      <button type="button" class="mach-st" data-st="coin" style="--x:50%;--y:88%"><span class="mach-ico mach-ico--coin"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#jp-mark"/></svg></span><span class="mach-lab mono">The coin</span><span class="mach-who-badge" aria-hidden="true"></span></button>
+      <button type="button" class="mach-st" data-st="copies" style="--x:12%;--y:50%"><span class="mach-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="12" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="9" y="3" width="12" height="14" rx="2" fill="currentColor" opacity=".35"/></svg></span><span class="mach-lab mono">The copies</span><span class="mach-who-badge" aria-hidden="true"></span></button>
+      <div class="mach-core" aria-live="polite"><span class="mono">Who's driving?</span><b class="mach-who">People</b><span class="mono mach-except">except the audience</span></div>
+    </div>
+    <div class="mach-card" aria-live="polite"><p class="mono mach-kick">Today · people</p><p class="mach-text">Tap a part of the machine.</p></div>
+    <button type="button" class="mach-toggle mono" aria-pressed="false">Take the people out</button>
+    <p class="mach-quote mono">“We do not claim that harmful [self-sovereign agents] can be fully prevented.” <a class="xref" href="https://self-sovereign-agent.github.io/paper.pdf" target="_blank" rel="noopener">The paper</a>'s authors</p>
+  </figure>
+  <script type="application/json" id="mach-data">{
+    "face": {"people": "Whoever runs the Jean Phil accounts. We can't say who. By Sept 24 there was a rival face, Archibald Brown, with a coin of his own. The recipe is public.",
+             "auto": "It decides what to post, tests what works and keeps the winners, on a loop, chasing a goal someone set once."},
+    "attention": {"people": "You. One remix drew about 636,000 plays and fewer than one comment per thousand. Watching is the work.",
+                  "auto": "Still you: the one part that never runs itself. The paper warns such an agent “can iteratively refine such tactics based on observed outcomes.” On a feed, the observed outcome is us."},
+    "coin": {"people": "Whoever launched JEANPHIL, and the at least sixteen coins built on it. Who holds them, or profits, we can't see.",
+             "auto": "Its own wallet. The paper's agent can “economically sustain and extend” its own operation: earn money, pay for its computing, keep going."},
+    "copies": {"people": "Ty's remix, our face swap, anyone with the tutorial. The copies run on people.",
+               "auto": "It copies itself onto rented computers and “treats individual hosts as disposable.” It survives as long as copies appear faster than they're taken down."}
+  }</script>
 </section>
 
 <section class="slide">
   <div class="slide-in">
     <p>A brand has to sign its influencer. A troll farm needs a payroll. A network of self-funding characters would need neither: no name on it, nobody to call, nothing to unplug.</p>
     <p class="big">That's new.</p>
-  </div>
-</section>
-
-<section class="slide">
-  <div class="slide-in">
-    <p><a class="xref" href="https://self-sovereign-agent.github.io/paper.pdf" target="_blank" rel="noopener">The paper</a> never mentions faces like his. It does list <q>social engineering campaigns</q> among the gray-market work a revenue-chasing agent might drift into, and warns it <q>can iteratively refine such tactics based on observed outcomes.</q></p>
-    <p class="big">On a feed, the observed outcome is us.</p>
-  </div>
-</section>
-
-<section class="slide">
-  <div class="slide-in">
-    <p>The paper's survival rule is simple: an agent persists when copies appear faster than they're taken down. Even the authors don't promise a fix: <q>We do not claim that harmful [self-sovereign agents] can be fully prevented.</q></p>
-    <p>So who drives it, and who pays its bills?</p>
-  </div>
-</section>
-
-<section class="slide" aria-label="The paper&#x27;s answer">
-  <div class="slide-in">
-    <p class="kick mono">The paper's agent</p>
-    <p class="reveal-word">Itself.</p>
   </div>
 </section>
 
@@ -460,9 +467,19 @@
   </div>
 </section>
 
-<section class="slide slide--paper">
+<section class="slide slide--paper slide--paths" aria-labelledby="paths-h">
   <div class="slide-in">
-    <p>The AI argument usually takes one of two paths. One: if everything's AI, how do we know anything's real? Two: as long as it's good, it doesn't matter. Here, path two won about twenty to one, acted out, not argued.</p>
+    <p class="paths-head" id="paths-h">The AI argument usually takes one of two paths.</p>
+    <figure class="paths" role="img" aria-label="A fork: 270 comments took the path 'as long as it's good, it doesn't matter'; 12 took 'if everything's AI, how do we know anything's real?'; none asked who's behind it or who gets paid.">
+      <svg viewBox="0 0 360 300" aria-hidden="true" focusable="false">
+        <path class="p-a" d="M180,6 C180,88 90,116 64,192" pathLength="1"/>
+        <path class="p-b" d="M180,6 C180,88 270,116 296,192" pathLength="1"/>
+        <path class="p-c" d="M180,6 C180,120 180,170 180,246" pathLength="1"/>
+      </svg>
+      <div class="paths-lab paths-lab--a"><b class="mono">12 worried</b><span>If everything's AI, how do we know anything's real?</span></div>
+      <div class="paths-lab paths-lab--c"><b class="mono">0 asked</b><span>Who's behind it? Who gets paid?</span></div>
+      <div class="paths-lab paths-lab--b"><b class="mono">270 laughed or passed it on</b><span>As long as it's good, it doesn't matter.</span></div>
+    </figure>
     <p>Both are about what we watch.</p>
     <p class="big">Neither is about what we fund.</p>
   </div>
