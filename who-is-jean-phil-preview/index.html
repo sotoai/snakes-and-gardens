@@ -124,12 +124,16 @@
   </div>
 </section>
 
-<section class="slide slide--red slide--terminator" aria-label="The Terminator, rescheduled">
-  <img class="term-art" src="../who-is-jean-phil/assets/brand/terminator-jp.webp" width="1024" height="1024" alt="Illustration: a chrome killer robot with glowing red eyes walks out of fire, wearing Jean Phil's blond bob and curled mustache.">
+<section class="slide slide--paper slide--monster" aria-label="The Terminator, rescheduled">
+  <figure class="monster-fig">
+    <canvas class="monster" role="img" aria-label="Illustration: a floating many-eyed monster in Jean Phil's blond bob and curled mustache, turning slowly. Some of its eyes are Jean Phil coins."></canvas>
+    <figcaption class="monster-credit mono">After a turntable monster by <a href="https://www.tiktok.com/@dolchefarniente" target="_blank" rel="noopener">@dolchefarniente ↗</a></figcaption>
+  </figure>
   <div class="slide-in">
     <p>The AI apocalypse was supposed to look like the Terminator.</p>
     <p class="big">What if it looks like this guy?</p>
   </div>
+  <script type="module" src="../who-is-jean-phil/assets/js/monster.js"></script>
 </section>
 
 <section class="reel-card" id="face" data-reel-section="face" aria-labelledby="reel1">
@@ -381,7 +385,7 @@
 <section class="reel-card" id="machine" data-reel-section="machine" aria-labelledby="reel4">
   <p class="numeral" aria-hidden="true">IV</p>
   <h2 id="reel4">The Machine</h2>
-  <p class="reel-line">In which we take the people out.</p>
+  <p class="reel-line">In which we try to switch it off.</p>
 </section>
 
 <section class="slide">
@@ -391,9 +395,9 @@
 </section>
 
 <section class="machine frame" id="machine-graphic" aria-labelledby="mach-h">
-  <p class="frame-head" id="mach-h">How the machine runs</p>
-  <p class="frame-sub">Tap a part. Then take the people out.</p>
-  <figure class="mach" data-mode="people">
+  <p class="frame-head" id="mach-h">Try to switch it off</p>
+  <p class="frame-sub">Tap a part to take it out.</p>
+  <figure class="mach" data-state="running">
     <div class="mach-ring">
       <svg class="mach-loop" viewBox="0 0 300 300" aria-hidden="true" focusable="false">
         <defs><marker id="mach-arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
@@ -404,32 +408,53 @@
           <path d="M52,104 A112,112 0 0 1 104,52" marker-end="url(#mach-arrow)"/>
         </g>
       </svg>
-      <button type="button" class="mach-st" data-st="face" style="--x:50%;--y:12%"><span class="mach-ico"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#jp-mark"/></svg></span><span class="mach-lab mono">The face</span><span class="mach-who-badge" aria-hidden="true"></span></button>
-      <button type="button" class="mach-st" data-st="attention" style="--x:88%;--y:50%"><span class="mach-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/></svg></span><span class="mach-lab mono">The attention</span><span class="mach-who-badge" aria-hidden="true"></span></button>
-      <button type="button" class="mach-st" data-st="coin" style="--x:50%;--y:88%"><span class="mach-ico mach-ico--coin"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#jp-mark"/></svg></span><span class="mach-lab mono">The coin</span><span class="mach-who-badge" aria-hidden="true"></span></button>
-      <button type="button" class="mach-st" data-st="copies" style="--x:12%;--y:50%"><span class="mach-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="12" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="9" y="3" width="12" height="14" rx="2" fill="currentColor" opacity=".35"/></svg></span><span class="mach-lab mono">The copies</span><span class="mach-who-badge" aria-hidden="true"></span></button>
-      <div class="mach-core" aria-live="polite"><span class="mono">Who's driving?</span><b class="mach-who">People</b><span class="mono mach-except">except the audience</span></div>
+      <button type="button" class="mach-st" data-st="face" aria-label="Take out the face" style="--x:50%;--y:12%"><span class="mach-ico"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#jp-mark"/></svg></span><span class="mach-lab mono">The face</span><span class="mach-tag mono" aria-hidden="true"></span></button>
+      <button type="button" class="mach-st" data-st="attention" aria-label="Take out the audience" style="--x:88%;--y:50%"><span class="mach-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/></svg></span><span class="mach-lab mono">The audience</span><span class="mach-tag mono" aria-hidden="true"></span></button>
+      <button type="button" class="mach-st" data-st="coin" aria-label="Take out the coin" style="--x:50%;--y:88%"><span class="mach-ico mach-ico--coin"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#jp-mark"/></svg></span><span class="mach-lab mono">The coin</span><span class="mach-tag mono" aria-hidden="true"></span></button>
+      <button type="button" class="mach-st" data-st="copies" aria-label="Take out the copies" style="--x:12%;--y:50%"><span class="mach-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="12" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="9" y="3" width="12" height="14" rx="2" fill="currentColor" opacity=".35"/></svg></span><span class="mach-lab mono">The copies</span><span class="mach-tag mono" aria-hidden="true"></span></button>
+      <div class="mach-core"><span class="mono">The machine is</span><b class="mach-who">running</b></div>
     </div>
-    <div class="mach-card" aria-live="polite"><p class="mono mach-kick">Today · people</p><p class="mach-text">Tap a part of the machine.</p></div>
-    <button type="button" class="mach-toggle mono" aria-pressed="false">Take the people out</button>
+    <div class="mach-card" aria-live="polite"><p class="mono mach-kick">How it runs</p><p class="mach-text"></p></div>
+    <button type="button" class="mach-toggle mono" hidden>Look back</button>
     <p class="mach-quote mono">“We do not claim that harmful [self-sovereign agents] can be fully prevented.” <a class="xref" href="https://self-sovereign-agent.github.io/paper.pdf" target="_blank" rel="noopener">The paper</a>'s authors</p>
   </figure>
   <script type="application/json" id="mach-data">{
-    "face": {"people": "Whoever runs the Jean Phil accounts. We can't say who. By Sept 24, <a class='xref' href='https://trending.knowyourmeme.com/editorials/guides/who-is-jean-philanthrope-and-is-he-ai-the-mysterious-frenchman-named-jean-phil-shadowboxing-across-social-media-explained' target='_blank' rel='noopener'>Know Your Meme</a> was reporting a rival face, Archibald Brown, with a coin named for him. Same makers? Unknown.",
-             "auto": "It decides what to post, tests what works and keeps the winners, on a loop, chasing a goal someone set once."},
-    "attention": {"people": "You. One remix drew about 636,000 plays and fewer than one comment per thousand. Watching is the work.",
-                  "auto": "Still you: the one part that never runs itself. The paper warns such an agent “may adjust its behavior in response to environmental feedback.” On a feed, the feedback is us."},
-    "coin": {"people": "Whoever launched JEANPHIL, and the at least sixteen coins built on it. Who holds them, or whether anyone profits, we can't see.",
-             "auto": "Its own wallet. The paper's agent can “economically sustain and extend” its own operation: earn money, pay for its computing, keep going."},
-    "copies": {"people": "<a class='xref' href='https://www.tiktok.com/@ty.farrago' target='_blank' rel='noopener'>Ty</a>'s remix, our face swap, anyone with the tutorial. The copies run on people.",
-               "auto": "It copies itself onto rented computers and “treats individual hosts as disposable.” It survives as long as copies appear faster than they're taken down."}
-  }</script>
+ "intro": {
+  "kick": "How it runs",
+  "text": "A face, an audience, a coin and copies of all three, each feeding the next. In principle, nobody has to be at the wheel."
+ },
+ "face": {
+  "kick": "Kill the face",
+  "text": "Another turns up. By Sept 24, <a class='xref' href='https://trending.knowyourmeme.com/editorials/guides/who-is-jean-philanthrope-and-is-he-ai-the-mysterious-frenchman-named-jean-phil-shadowboxing-across-social-media-explained' target='_blank' rel='noopener'>Know Your Meme</a> was reporting a rival face, Archibald Brown, with a coin based on him. Same makers? Unknown."
+ },
+ "coin": {
+  "kick": "Kill the coin",
+  "text": "Too late. At least sixteen coins are built on it; the first appeared 21 hours after launch. Who made them, we can't tell."
+ },
+ "copies": {
+  "kick": "Take down a copy",
+  "text": "Another goes up. The recipe is public: we made our own on free credits. The paper's agent copies itself onto rented computers and “treats individual hosts as disposable.”"
+ },
+ "attention": {
+  "kick": "Look away",
+  "text": "Everything stops. No views, no buyers, no new copies. It's the one part the machine can't make for itself: us."
+ },
+ "back": {
+  "kick": "Look back",
+  "text": "And it's running again."
+ },
+ "tags": {
+  "face": "new face",
+  "coin": "×16",
+  "copies": "+1"
+ }
+}</script>
 </section>
 
 <section class="slide">
   <div class="slide-in">
-    <p>A brand has to sign its influencer. A troll farm needs a payroll. A network of self-funding characters would need neither: no name on it, nobody to call, nothing to unplug.</p>
-    <p class="big">That's new.</p>
+    <p>A brand has to sign its influencer. A troll farm needs a payroll. A network of self-funding characters would need neither: no name on it, nobody to call.</p>
+    <p class="big">The only off switch is us.</p>
   </div>
 </section>
 
@@ -558,7 +583,7 @@
 
   <details id="notes-limits">
     <summary>What we can't show</summary>
-    <p>Nothing we found establishes who runs the Jean Phil accounts, who launched any of the coins, who holds them or whether anyone has profited. The man in the videos may be a real performer. Nothing shows who made Archibald Brown, the rival face Know Your Meme reported, or the coin named for him. The pump-and-dump claim is Jeremy Carrasco's. That Jean Phil might be an early self-sovereign agent is our hypothesis, not a finding, and the paper never mentions him. Tako's contradictions show a machine guessing, not a machine lying.</p>
+    <p>Nothing we found establishes who runs the Jean Phil accounts, who launched any of the coins, who holds them or whether anyone has profited. The man in the videos may be a real performer. Nothing shows who made Archibald Brown, the rival face Know Your Meme reported, or the coin based on him. The pump-and-dump claim is Jeremy Carrasco's. That Jean Phil might be an early self-sovereign agent is our hypothesis, not a finding, and the paper never mentions him. Tako's contradictions show a machine guessing, not a machine lying.</p>
   </details>
 
   <details id="notes-swap">
@@ -571,7 +596,7 @@
     <p><b>The paper.</b> Wenjie Qu, Xuandong Zhao, Jiaheng Zhang and Dawn Song, <a href="https://self-sovereign-agent.github.io/paper.pdf" target="_blank" rel="noopener">“Self-Sovereign Agent”</a> (National University of Singapore and UC Berkeley), preprint dated March 16, 2026 (<a href="https://arxiv.org/abs/2604.08551" target="_blank" rel="noopener">arXiv</a>). About Dawn Song: <a href="https://www.macfound.org/fellows/class-of-2010/dawn-song" target="_blank" rel="noopener">MacArthur Foundation</a>, <a href="https://dawnsong.io/bio.html" target="_blank" rel="noopener">her bio</a>, <a href="https://finance.yahoo.com/technology/ai/articles/meta-hires-virtue-ai-founders-162132308.html" target="_blank" rel="noopener">Axios on her move to Meta</a>.</p>
     <p><b>Reporting.</b> <a href="https://trending.knowyourmeme.com/editorials/guides/who-is-jean-philanthrope-and-is-he-ai-the-mysterious-frenchman-named-jean-phil-shadowboxing-across-social-media-explained" target="_blank" rel="noopener">Zach Sweat, Know Your Meme</a> (Sept 24, 2026); <a href="https://techcrunch.com/2024/12/19/the-promise-and-warning-of-truth-terminal-the-ai-bot-that-secured-50000-in-bitcoin-from-marc-andreessen/" target="_blank" rel="noopener">TechCrunch on Truth Terminal</a>.</p>
     <p><b>The people in it.</b> <a href="https://www.tiktok.com/@jean_philanthrope" target="_blank" rel="noopener">Jean Phil</a>; <a href="https://www.tiktok.com/@ty.farrago" target="_blank" rel="noopener">Ty Farrago</a>, who made the remix and the tutorial; <a href="https://www.tiktok.com/@jeremyfindsai" target="_blank" rel="noopener">Jeremy Carrasco</a>; <a href="https://www.tiktok.com/@movie_scenes012" target="_blank" rel="noopener">@movie_scenes012</a>, whose upload the remix borrows (original filmer unknown); and <a href="https://www.tiktok.com/@jefin_nordestino" target="_blank" rel="noopener">Jeferson</a>, whose video we altered (he wasn't consulted). Crediting them doesn't mean they approved this story.</p>
-    <p><b>Artwork.</b> The bust, the Jean Phil symbol, the Tako drawings and the robot in a wig (a parody of the movie killer robot) are AI-assisted Snakes &amp; Gardens illustrations; the closing garden is Snakes &amp; Gardens artwork from 2023.</p>
+    <p><b>Artwork.</b> The bust, the Jean Phil symbol, the Tako drawings and the many-eyed monster are AI-assisted Snakes &amp; Gardens illustrations. The monster is our own drawing, coded to turn in 3D, after a <a href="https://www.tiktok.com/@dolchefarniente" target="_blank" rel="noopener">turntable animation by @dolchefarniente</a>; swipe it sideways to spin it; the closing garden is Snakes &amp; Gardens artwork from 2023.</p>
   </details>
 
   <p class="fine mono notes-foot">Snakes &amp; Gardens · September 27, 2026. Videos and screenshots belong to their creators and appear here for reporting and commentary. If you made or appear in any of it and want it credited differently, corrected or removed, <a href="https://github.com/sotoai/snakes-and-gardens/issues" target="_blank" rel="noopener">open an issue ↗</a>.</p>
