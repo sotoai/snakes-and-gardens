@@ -1068,3 +1068,21 @@ video::cue{font-family:var(--sans,system-ui),system-ui,sans-serif;font-size:clam
 @media (max-width:400px){.cell-chip{overflow:visible;text-overflow:clip}}
 @media (max-width:860px){.cell-chip{overflow-wrap:normal;overflow:hidden}}
 @media (max-width:860px){.cell-chip{padding:2px 5px;letter-spacing:-.01em}}
+/* Full audio: in each grid all four clips play, one is heard. A transparent button over each clip picks it;
+   the heard clip gets a thin ring and a speaker in its chip (dimmed while page sound is off). */
+.cell-hear{position:absolute;inset:0;margin:0;padding:0;border:0;border-radius:4px;background:none;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.grid4 figure .cell-chip{z-index:1}
+.stage-media .grid4 figure video{transition:box-shadow .25s var(--ease)}
+.stage-media .grid4 figure.is-heard video{box-shadow:0 0 0 1.5px var(--bone),0 0 60px rgba(0,0,0,.6)}
+.grid-hint{color:var(--mute)}
+@media (max-width:860px){.grid-tag{white-space:normal;text-align:center;border-radius:12px;max-width:calc(100vw - 2*var(--gutter))}.grid-hint{display:block;margin-top:1px}.grid-hint-sep{display:none}}
+/* The heard clip's speaker sits in a small badge in the cell's top-right corner at every width, so a chip never
+   changes width when focus moves. pointer-events:none lets a tap fall through to .cell-hear. */
+.grid4 figure.is-heard::after{content:"";position:absolute;top:4px;right:4px;z-index:1;width:18px;height:18px;box-sizing:border-box;border-radius:50%;border:1px solid var(--line);pointer-events:none;background:rgba(12,11,10,.74) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23f2ece1' d='M1.5 5.5h3l4-3.2v11.4l-4-3.2h-3z'/%3E%3Cpath d='M10.8 5.4a3.6 3.6 0 0 1 0 5.2M12.9 3.3a6.6 6.6 0 0 1 0 9.4' fill='none' stroke='%23f2ece1' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") center/10px no-repeat}
+:root[data-sound="off"] .grid4 figure.is-heard::after{opacity:.45}
+/* Narrow desktops (861-1100px): the grid starts at max(34rem,37vw), so the tag's hint goes on its own line. */
+@media (min-width:861px) and (max-width:1100px){
+  .grid-tag{white-space:normal;border-radius:12px;max-width:calc(100vw - max(34rem,37vw) - var(--gutter))}
+  .grid-hint{display:block;margin-top:1px}
+  .grid-hint-sep{display:none}
+}
