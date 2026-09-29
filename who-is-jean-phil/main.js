@@ -42,6 +42,8 @@ if (notesSection) {
 
 /* ---------------- Video manager ---------------- */
 const autoVideos = $$('video[data-auto]');
+const repriseVideo = $('video[data-reprise]');
+const allVideos = () => [...autoVideos, swap.under, swap.over, repriseVideo].filter(Boolean);
 const visible = new Map();
 function isActiveMedia(v) {
   const fig = v.closest('.stage-media');
@@ -55,31 +57,129 @@ function primaryVideo() {
   }
   return bestRatio > .3 ? best : null;
 }
+
+/* ---------------- Tape cues ----------------
+   data-cue="in,out" is the script's tape: it plays once, with sound, when page sound is on and the video
+   leads; a timer mutes it just before the next word. data-loop="in,out" is the muted picture loop (it
+   defaults to the cue). Nothing else is ever unmuted, except the swap's original while it plays in view.
+   (full-result.mp4 and donkey-source.mp4 are page copies trimmed to Jeferson's 3.20-58.20 s, so they
+   can't play his unverified opening line or TikTok's end card at all.) */
+const span = s => { if (!s) return null; const [a, b] = s.split(',').map(Number); return Number.isFinite(a) && Number.isFinite(b) ? [a, b] : null; };
+const cueOf = v => span(v.dataset.cue);
+const loopOf = v => span(v.dataset.loop) || cueOf(v);
+const soundReady = v => state.sound && state.unlocked && !!v.dataset.primed;
+const MARGIN = .04; // mute this long before the out point: the next word can start 15 ms after it
+const passes = new Map(); // video -> {timer, playing}
+function whenMeta(v) {
+  if (v.readyState >= 1) return Promise.resolve();
+  return new Promise(r => { v.addEventListener('loadedmetadata', r, {once: true}); if (v.preload === 'none') { v.preload = 'auto'; v.load(); } });
+}
+function seekTo(v, t) {
+  return new Promise(r => {
+    if (Math.abs(v.currentTime - t) < .01) return r();
+    v.addEventListener('seeked', r, {once: true});
+    v.currentTime = t;
+  });
+}
+function arm(v) {
+  const p = passes.get(v), cue = cueOf(v);
+  if (!p || !p.playing || v.paused) return;
+  clearTimeout(p.timer);
+  const left = (cue[1] - v.currentTime - MARGIN) * 1000 / (v.playbackRate || 1);
+  if (left <= 0) return endPass(v, true);
+  p.timer = setTimeout(() => endPass(v, true), left);
+}
+// Seek to the cue, unmute and play. Resolves once it plays with sound; rejects with the play() error.
+function beginPass(v) {
+  const cue = cueOf(v), p = {timer: 0, playing: false};
+  passes.set(v, p);
+  if (v.preload !== 'auto') v.preload = 'auto';
+  return whenMeta(v).then(() => seekTo(v, cue[0])).then(() => {
+    if (passes.get(v) !== p) throw Object.assign(new Error('cue cancelled'), {name: 'AbortError'});
+    v.muted = false;
+    return v.play();
+  }).then(() => {
+    if (passes.get(v) !== p) { v.muted = true; return; }
+    p.playing = true;
+    arm(v);
+  });
+}
+function startPass(v) {
+  if (!v || !cueOf(v) || v.dataset.heard || passes.has(v) || !soundReady(v)) return false;
+  beginPass(v).catch(err => {
+    endPass(v, false);
+    // iOS may refuse an unmuted play: fall back to muted and leave the cue unheard.
+    if (err.name === 'NotAllowedError') delete v.dataset.primed;
+    if (v === repriseVideo) return playRepriseMuted(v);
+    if (state.autoplay && !v.dataset.userPaused && v === primaryVideo()) v.play().catch(() => {});
+  });
+  return true;
+}
+// complete: reached the out point. Interrupted passes count as heard once past their halfway mark.
+function endPass(v, complete) {
+  const p = passes.get(v); if (!p) return;
+  clearTimeout(p.timer); passes.delete(v);
+  v.muted = true;
+  const cue = cueOf(v);
+  if (complete || (p.playing && v.currentTime - cue[0] > (cue[1] - cue[0]) / 2)) v.dataset.heard = '1';
+  if (v === repriseVideo) { if (complete) holdReprise(v); return; }
+  keepInLoop(v);
+}
+// The muted picture loop: stays inside data-loop (never the native loop attribute).
+function keepInLoop(v) {
+  const p = passes.get(v);
+  if (p) { if (p.playing && v.currentTime >= cueOf(v)[1] - MARGIN) endPass(v, true); return; }
+  const loop = loopOf(v); if (!loop || v === repriseVideo || v.seeking) return;
+  const t = v.currentTime;
+  if (t < loop[0] - .1 || t >= loop[1] - .05) v.currentTime = loop[0];
+}
+for (const v of allVideos().filter(x => loopOf(x))) {
+  v.removeAttribute('loop');
+  v.addEventListener('loadedmetadata', () => { if (!passes.has(v)) keepInLoop(v); });
+  v.addEventListener('timeupdate', () => { keepInLoop(v); if (passes.has(v)) arm(v); });
+  v.addEventListener('playing', () => { const p = passes.get(v); if (p && !v.muted) { p.playing = true; arm(v); } });
+  v.addEventListener('waiting', () => { const p = passes.get(v); if (p) clearTimeout(p.timer); });
+  v.addEventListener('pause', () => { if (passes.has(v) && !v.dataset.probing) endPass(v, false); });
+  v.addEventListener('ended', () => {
+    if (passes.has(v)) endPass(v, true);
+    if (v === repriseVideo) return;
+    const loop = loopOf(v); v.currentTime = loop ? loop[0] : 0;
+    if (!v.dataset.userPaused && (v === primaryVideo() || v === swap.under || v === swap.over)) v.play().catch(() => {});
+  });
+  if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
+    const tick = () => { keepInLoop(v); v.requestVideoFrameCallback(tick); };
+    v.requestVideoFrameCallback(tick);
+  }
+}
+
 function applySound() {
-  const lead = swap.playing && swap.inView ? swap.under : primaryVideo();
-  for (const v of [...autoVideos, swap.under, swap.over]) {
-    if (!v || v.dataset.probing) continue;
-    v.muted = !(state.sound && state.unlocked && v.dataset.primed && v === lead);
+  const swapLead = swap.playing && swap.inView;
+  for (const v of allVideos()) {
+    if (v.dataset.probing) continue;
+    // A video in its own audible pass keeps its sound until the pass ends; turning sound off ends it.
+    if (passes.has(v)) { if (!soundReady(v)) endPass(v, false); continue; }
+    v.muted = !(v === swap.under && swapLead && soundReady(v));
   }
 }
 // iOS pauses a video that gets unmuted outside a tap, and refuses to play it unmuted.
 // If that happens, fall back to muted playback instead of leaving it stopped.
 // Sound is on by default. Where the browser allows sound without a tap (some in-app browsers, or a desktop
-// browser the reader has used here before), the first video simply starts with sound. Otherwise it plays
-// muted, and the first tap anywhere turns sound on (see unlockSound).
+// browser the reader has used here before), the first cue simply plays with sound. Otherwise the video plays
+// muted, and the first tap anywhere turns sound on (see unlockSound). The probe only ever unmutes a cue.
 let probed = false;
 function probeSound(v) {
   probed = true;
   v.dataset.probing = '1';
-  v.muted = false;
-  return v.play().then(() => {
+  return beginPass(v).then(() => {
     delete v.dataset.probing;
+    if (!passes.has(v)) return;
     state.unlocked = true;
-    for (const x of [...autoVideos, swap.under, swap.over]) if (x) x.dataset.primed = '1';
+    for (const x of allVideos()) x.dataset.primed = '1';
     renderSound();
     applySound();
   }, err => {
     delete v.dataset.probing;
+    endPass(v, false);
     v.muted = true;
     // Paused or failed to load before it could start: that isn't a refusal, so try again on the next play.
     if (err.name !== 'NotAllowedError') { probed = false; applySound(); return; }
@@ -89,25 +189,25 @@ function probeSound(v) {
   });
 }
 function playSafely(v) {
-  if (!probed && state.sound && !state.unlocked) return probeSound(v);
-  return v.play().catch(err => {
-    if (err.name !== 'NotAllowedError' || v.muted) return;
-    delete v.dataset.primed;
-    v.muted = true;
-    v.play().catch(() => {});
-  });
+  if (!probed && state.sound && !state.unlocked && cueOf(v) && !v.dataset.heard) return probeSound(v);
+  if (!passes.has(v)) v.muted = true;
+  return v.play().catch(() => {});
 }
 function updateVideos() {
   const lead = primaryVideo();
   for (const v of autoVideos) {
-    const shouldPlay = state.autoplay && v === lead;
+    // Every clip in an active grid plays together; elsewhere only the lead video plays.
+    const inGrid = v.closest('.stage-media--grid') && isActiveMedia(v) && (visible.get(v) || 0) > .15;
+    const shouldPlay = state.autoplay && (v === lead || inGrid);
     if (shouldPlay) {
       if (v.preload === 'none') v.preload = 'auto';
-      if (v.paused && !v.dataset.userPaused) playSafely(v);
-    } else if (!v.paused && v !== lead) {
+      if (v.paused && !v.dataset.userPaused && !passes.has(v)) playSafely(v);
+    } else if (!v.paused && v !== lead && !inGrid) {
       v.pause();
-    }
+    } else if (passes.has(v) && v !== lead) endPass(v, false);
   }
+  // The lead video's tape plays once, with page sound on.
+  if (lead && state.autoplay && !lead.dataset.userPaused && !(swap.playing && swap.inView)) startPass(lead);
   applySound();
 }
 const videoIO = new IntersectionObserver(entries => {
@@ -118,7 +218,7 @@ autoVideos.forEach(v => {
   videoIO.observe(v);
   v.addEventListener('click', () => {
     if (justUnlocked() && !v.paused) return;
-    if (v.paused) { delete v.dataset.userPaused; playSafely(v); }
+    if (v.paused) { delete v.dataset.userPaused; if (!startPass(v)) playSafely(v); }
     else { v.dataset.userPaused = '1'; v.pause(); }
   });
 });
@@ -126,7 +226,36 @@ autoVideos.forEach(v => {
 const preloadIO = new IntersectionObserver(entries => {
   for (const e of entries) if (e.isIntersecting && e.target.preload === 'none') e.target.preload = 'metadata';
 }, {rootMargin: '150% 0px'});
-autoVideos.forEach(v => preloadIO.observe(v));
+[...autoVideos, repriseVideo].filter(Boolean).forEach(v => preloadIO.observe(v));
+
+/* ---------------- Laugh reprise: the cold open's laugh, once, then the labeled face held ---------------- */
+function holdReprise(v) {
+  v.pause(); v.muted = true;
+  const hold = Number(v.dataset.hold);
+  if (Number.isFinite(hold)) seekTo(v, hold);
+}
+function playRepriseMuted(v) {
+  const cue = cueOf(v);
+  whenMeta(v).then(() => seekTo(v, cue[0])).then(() => { v.muted = true; return v.play(); }).then(() => {
+    const stop = () => { if (v.currentTime >= cue[1] - MARGIN) { v.removeEventListener('timeupdate', stop); holdReprise(v); } };
+    v.addEventListener('timeupdate', stop);
+    setTimeout(() => { v.removeEventListener('timeupdate', stop); if (!v.paused) holdReprise(v); }, (cue[1] - v.currentTime) * 1000 + 250);
+  }).catch(() => {});
+}
+if (repriseVideo) {
+  let played = false;
+  new IntersectionObserver(([e]) => {
+    if (played || !e.isIntersecting || e.intersectionRatio < .5) return;
+    played = true;
+    if (!state.autoplay) { played = false; return; } // leave the poster: the same face, mid-laugh
+    if (!startPass(repriseVideo)) playRepriseMuted(repriseVideo);
+  }, {threshold: [0, .5, .75]}).observe(repriseVideo);
+  repriseVideo.addEventListener('click', () => {
+    if (!repriseVideo.paused || passes.has(repriseVideo)) return;
+    played = true;
+    if (!startPass(repriseVideo)) playRepriseMuted(repriseVideo);
+  });
+}
 
 const soundBtn = $('#sound-toggle'), motionBtn = $('#motion-toggle');
 function renderSound() {
@@ -137,12 +266,13 @@ function renderSound() {
   if (cta) cta.hidden = !(state.sound && !state.unlocked && (state.refused || !state.autoplay));
 }
 // Called inside a tap or key press. Playing each video once, unmuted, while the gesture is live
-// is what lets it play with sound later, when scrolling brings it on screen.
+// is what lets it play with sound later, when scrolling brings it on screen. Each one is paused and
+// re-muted in the same instant, so nothing is heard.
 let unlockedAt = -Infinity;
 const justUnlocked = () => performance.now() - unlockedAt < 700;
 function unlockSound() {
   if (state.unlocked) return;
-  const all = [...autoVideos, swap.under, swap.over].filter(Boolean);
+  const all = allVideos().filter(v => !passes.has(v));
   const tries = all.map(v => {
     const wasPaused = v.paused, wasMuted = v.muted;
     v.dataset.primed = '1';
@@ -156,6 +286,7 @@ function unlockSound() {
   unlockedAt = performance.now();
   renderSound();
   // Start whatever should be playing now, while the gesture is still live (Low Power Mode blocks even muted autoplay).
+  // On the cold open this starts the laugh: the first thing a reader with sound on hears.
   updateVideos();
   swap.resume?.();
   Promise.all(tries).then(results => {
@@ -192,7 +323,7 @@ soundBtn.addEventListener('click', () => {
     const lead = swap.playing && swap.inView ? swap.under : primaryVideo();
     if (lead && lead.paused) playSafely(lead);
   }
-  applySound();
+  updateVideos();
 });
 $('#sound-cta')?.addEventListener('click', () => {
   const v = primaryVideo();
@@ -210,9 +341,12 @@ function setAutoplay(on) {
 }
 motionBtn.addEventListener('click', () => setAutoplay(!state.autoplay));
 setAutoplay(state.autoplay);
-// Browsers may pause muted videos while a tab or pane is hidden; resume the lead video when it's visible again.
+// Tab hidden: pause everything (an interrupted cue ends muted). Back: resume muted, or replay a cue not yet heard.
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) { autoVideos.forEach(v => { if (!v.paused) v.pause(); }); swap.stop?.(); return; }
+  if (document.hidden) {
+    for (const v of allVideos()) { if (passes.has(v)) endPass(v, false); if (!v.paused && v !== repriseVideo) v.pause(); }
+    swap.stop?.(); return;
+  }
   updateVideos();
   swap.resume?.();
 });
@@ -228,6 +362,20 @@ if ('mediaSession' in navigator) {
   });
 }
 setInterval(() => { if (!document.hidden) updateVideos(); }, 2500);
+
+/* ---------------- Captions (Ty's remix and tutorial) ----------------
+   On a phone the beats cover the bottom of the video, so the captions move to the top of the frame. */
+const cuesUp = matchMedia('(max-width: 860px)');
+function placeCaptions(track) {
+  for (const c of [...(track.cues || [])]) {
+    if (cuesUp.matches) { c.snapToLines = false; c.line = 12; } else { c.snapToLines = true; c.line = 'auto'; }
+  }
+}
+for (const el of $$('video track')) {
+  el.addEventListener('load', () => placeCaptions(el.track));
+  if (el.readyState === 2) placeCaptions(el.track);
+}
+cuesUp.addEventListener('change', () => $$('video track').forEach(el => placeCaptions(el.track)));
 
 /* ---------------- Scrolly scenes ---------------- */
 for (const scene of $$('[data-scrolly]')) {
@@ -380,10 +528,12 @@ dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close();
   let hinted = false;
 
   let raf = 0;
+  // Both files are page copies trimmed to Jeferson's 3.20-58.20 s; every seek is still clamped to the file.
+  const clampT = (v, t) => Math.max(0, Math.min(t, (Number.isFinite(v.duration) ? v.duration : 55) - .05));
   function sync() {
     if (!swap.playing) return;
     const d = swap.over.currentTime - swap.under.currentTime;
-    if (Math.abs(d) > .12) swap.over.currentTime = swap.under.currentTime;
+    if (Math.abs(d) > .12) swap.over.currentTime = clampT(swap.over, swap.under.currentTime);
     raf = requestAnimationFrame(sync);
   }
   let starting = false;
@@ -391,7 +541,7 @@ dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close();
     if (starting) return;
     starting = true;
     for (const v of [swap.under, swap.over]) if (v.preload === 'none') { v.preload = 'auto'; v.load(); }
-    swap.over.currentTime = swap.under.currentTime;
+    swap.over.currentTime = clampT(swap.over, swap.under.currentTime);
     try { await Promise.all([swap.under.play(), swap.over.play()]); } catch { return; } finally { starting = false; }
     if (auto && !swap.inView) { swap.under.pause(); swap.over.pause(); return; }
     swap.playing = true; btn.textContent = '❚❚ Pause'; btn.setAttribute('aria-pressed', 'true');
@@ -406,7 +556,7 @@ dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close();
   });
   swap.stop = pause;
   swap.resume = () => { if (swap.inView && state.autoplay && !swap.playing && !swap.userPaused) play(true); };
-  swap.under.addEventListener('seeked', () => { swap.over.currentTime = swap.under.currentTime; });
+  swap.under.addEventListener('seeked', () => { swap.over.currentTime = clampT(swap.over, swap.under.currentTime); });
   new IntersectionObserver(([e]) => {
     swap.inView = e.isIntersecting && e.intersectionRatio > .4;
     if (swap.inView) {

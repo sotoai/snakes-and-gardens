@@ -1,6 +1,6 @@
 // The headless machine: an interactive illustration. The monster sits in the middle of the page and
 // sprays Jean Phil copies; every copy sends coins back; viral moments fly in, hit the monster, spike
-// the JEANPHIL line and set off a burst of new copies. Pop a copy and another takes its place.
+// an imagined coin's line and set off a burst of new copies. Pop a copy and another takes its place.
 // There's no start, no score and no end: it just keeps going, calmly, while it's on screen.
 import {makeMonster} from './monster.js';
 
@@ -130,7 +130,7 @@ function init(root) {
     const n = L.port ? 9 : 14;
     for (let k = 0; k < n; k++) spawn(.15 + k * .11);
     fx.push({kind: 'ring', x: L.mx, y: L.my, r: L.S * 1.6, t0: t, dur: .6});
-    say('The coin jumps. More copies.');
+    say('An imagined coin jumps. More copies.');
   }
 
   function step(dt) {
@@ -209,7 +209,7 @@ function init(root) {
     ctx.beginPath(); ctx.moveTo(pad, b); ctx.lineTo(W - pad, b); ctx.stroke();
     const fs = Math.max(11 * dpr, L.u * 3.4);
     ctx.fillStyle = C.ink; ctx.font = `italic ${fs}px ${display}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    ctx.fillText('JEANPHIL', pad, (y0 + y1) / 2 - fs * .45);
+    ctx.fillText('a coin', pad, (y0 + y1) / 2 - fs * .45);
     ctx.fillStyle = price > 1.6 ? C.red : C.mute; ctx.font = `${fs * 1.15}px ${display}`;
     ctx.fillText(`×${price.toFixed(1)}`, pad, (y0 + y1) / 2 + fs * .75);
     ctx.fillStyle = C.mute; ctx.font = `italic ${fs * .78}px ${display}`;

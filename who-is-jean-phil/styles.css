@@ -999,3 +999,72 @@ html.snap{scroll-padding-top:0}
   .square.frame .wall-filters{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:8px}
   .square.frame .wall-filters button{font-size:.56rem;padding:4px 7px;text-align:left;line-height:1.25}
 }
+
+/* Derivatives grid: other accounts' versions of him, all playing at once */
+.stage-media--grid{padding:var(--nav-h,52px) var(--gutter) 0}
+.grid4{display:grid;grid-template-columns:repeat(2,auto);gap:10px;margin:0}
+.grid4 figure{position:relative;margin:0}
+.stage-media .grid4 video{height:calc((100vh - var(--nav-h,52px) - 56px) / 2);height:calc((100svh - var(--nav-h,52px) - 56px) / 2);width:auto;max-width:none;display:block;border-radius:4px;box-shadow:0 0 60px rgba(0,0,0,.6)}
+.cell-chip{position:absolute;left:8px;bottom:8px;margin:0;font-size:.66rem;padding:3px 9px;border-radius:999px;background:rgba(12,11,10,.74);border:1px solid var(--line);color:var(--bone-2);white-space:nowrap}
+.cell-chip a{color:var(--bone)}
+@media (min-width:861px){.stage-media--grid{justify-content:flex-start;padding-left:max(34rem,37vw)}.stage-media .grid4 video{height:min(calc((100svh - var(--nav-h,52px) - 56px) / 2),calc((100vw - max(34rem,37vw) - 3rem) * 8 / 9))}}
+@media (max-width:860px){.stage-media--grid{align-items:flex-start;padding-top:calc(var(--nav-h,52px) + 12px)}.grid4{gap:8px}
+  .stage-media .grid4 video{height:max(96px,calc((100svh - var(--nav-h,52px) - 440px) / 2))}
+  .cell-chip{left:4px;bottom:4px;font-size:.54rem;padding:2px 6px}
+  .beat.beat--low:not(.beat--subtitle):not(.beat--credit){padding-bottom:3vh}}
+@media (max-width:400px){.cell-chip{max-width:calc(100% - 8px);overflow:hidden;text-overflow:ellipsis}}
+@media (max-width:860px){.beat.beat--high:not(.beat--subtitle):not(.beat--credit){justify-content:flex-start;padding-top:calc(var(--nav-h,52px) + 12px)}}
+
+/* ============ v8: aligned to the approved audio script ============ */
+/* Grid tags: "His own account" / "Other accounts", above each 2x2 grid */
+.stage-media--grid{flex-direction:column;gap:8px}
+.grid-tag{margin:0;align-self:flex-start;font-size:.66rem;letter-spacing:.12em;text-transform:uppercase;color:var(--bone-2);background:rgba(12,11,10,.74);border:1px solid var(--line);border-radius:999px;padding:4px 11px;white-space:nowrap}
+.grid-tag a{color:var(--bone)}
+.stage-media .grid4 video{height:calc((100vh - var(--nav-h,52px) - 96px) / 2);height:calc((100svh - var(--nav-h,52px) - 96px) / 2)}
+@media (min-width:861px){.stage-media--grid{justify-content:center;align-items:flex-start}
+  .stage-media .grid4 video{height:min(calc((100svh - var(--nav-h,52px) - 96px) / 2),calc((100vw - max(34rem,37vw) - 3rem) * 8 / 9))}}
+@media (max-width:860px){.stage-media--grid{justify-content:flex-start;align-items:center}.grid-tag{align-self:center;font-size:.56rem;padding:3px 9px}
+  .stage-media .grid4 video{height:max(96px,calc((100svh - var(--nav-h,52px) - 470px) / 2))}}
+/* The coda's card: red, with a word for a numeral */
+.reel-card--coda .numeral{font-size:clamp(5rem,14.3vw,12.1rem);margin:.3em 0 .15em}
+/* The laugh reprise: the cold open's letterboxed stage, alone, no words */
+.reprise{position:relative;scroll-snap-align:start;scroll-snap-stop:always}
+.reprise .stage{position:relative;height:100vh;height:100svh}
+.reprise video{cursor:pointer}
+/* Captions for Ty's remix and tutorial (no burned-in captions of their own) */
+video::cue{font-family:var(--sans,system-ui),system-ui,sans-serif;font-size:clamp(15px,1.1vw + 10px,22px);line-height:1.3;color:#fff;background:rgba(0,0,0,.72)}
+/* The two futures: snake first, then garden; heading plus one line each */
+.square--futures .poles.in .pole--snake{transition-delay:0s}
+.square--futures .poles.in .pole--garden{transition-delay:.25s}
+.pole-quote{font-family:var(--display);font-style:italic;font-size:1.2rem;line-height:1.25;padding:.5rem 0;border-top:1px dashed rgba(20,19,18,.18);margin:0}
+.pole-quote a.xref{text-decoration-color:rgba(20,19,18,.45)}
+@media (max-width:560px){.square--futures .poles{grid-template-columns:1fr;gap:10px}.square--futures .pole h3{font-size:1.15rem}.pole-quote{font-size:1rem}}
+.grid-tag a{text-transform:none;letter-spacing:.04em}
+/* Longer v8 heads: keep the market, the paper and the wall on one screen */
+.market.frame .frame-head{font-size:clamp(1.45rem,1rem + 1.5vw,2.3rem);max-width:30ch}
+#square.frame .frame-head{font-size:clamp(1.35rem,.9rem + 1.45vw,2.2rem);max-width:32ch}
+.paper-intro .slide-in>p{font-size:clamp(1.2rem,.95rem + 1.05vw,1.85rem)}
+@media (min-width:900px){
+  .paper-intro .slide-in{display:grid;grid-template-columns:minmax(0,1fr) 340px;column-gap:56px;align-items:center;max-width:66rem}
+  .paper-intro .slide-in>p{grid-column:1}
+  .paper-intro .slide-in>.paper-card{grid-column:2;grid-row:1 / span 4;margin:0}
+}
+@media (max-width:560px){
+  #square.frame .frame-head{font-size:1.18rem;max-width:26ch}
+  .market.frame .frame-head{font-size:1.3rem}
+  .market.frame .market-chart svg{height:130px}
+  .paper-intro .slide .paper-card,.paper-intro .paper-card{padding:1rem 1.1rem .9rem;margin-top:1rem}
+  .paper-intro .paper-card b{font-size:1.5rem;margin:.4rem 0}
+}
+.market.frame{padding-bottom:max(5svh,32px)!important}
+@media (max-height:980px){.market.frame .market-chart svg{height:150px}.market.frame .market-stats{margin:.6rem 0}}
+@media (max-width:560px){.market.frame .market-chart svg{height:120px}}
+.reel-card--coda .numeral{-webkit-text-stroke:1.5px rgba(0,0,0,.6)}
+/* Phone grids: slightly larger cells, and chips that wrap instead of cutting off the play counts */
+@media (max-width:860px){
+  .stage-media .grid4 video{height:max(96px,calc((100svh - var(--nav-h,52px) - 430px) / 2))}
+  .cell-chip{white-space:normal;line-height:1.2;max-width:calc(100% - 8px);overflow-wrap:anywhere}
+}
+@media (max-width:400px){.cell-chip{overflow:visible;text-overflow:clip}}
+@media (max-width:860px){.cell-chip{overflow-wrap:normal;overflow:hidden}}
+@media (max-width:860px){.cell-chip{padding:2px 5px;letter-spacing:-.01em}}
