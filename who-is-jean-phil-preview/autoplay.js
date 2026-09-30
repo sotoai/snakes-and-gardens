@@ -22,9 +22,9 @@
 // Reader mode (Play never pressed) is untouched: until the first press this module only listens, and every listener
 // returns at once. Nothing ever starts on its own.
 
-import {selectPeriod} from './market-data.mjs';
+import {selectPeriod} from '../who-is-jean-phil/assets/js/market-data.mjs';
 
-const DATA = 'assets/data/choreography-play.json', SNAPSHOT = 'assets/data/market-snapshot.json';
+const DATA = '../who-is-jean-phil/assets/data/choreography-play.json', SNAPSHOT = '../who-is-jean-phil/assets/data/market-snapshot.json';
 const btn = document.getElementById('play-toggle');
 const audio = document.getElementById('sg-audio');
 const root = document.documentElement;
@@ -1119,7 +1119,7 @@ function session(s) {
     if (s === 'play') {
       if (!MS.metadata && typeof MediaMetadata === 'function') {
         MS.metadata = new MediaMetadata({title: 'Who is Jean Phil?', artist: 'Snakes & Gardens', album: 'Narrated',
-          artwork: [{src: new URL('assets/brand/og.jpg', location.href).href, sizes: '1200x630', type: 'image/jpeg'}]});
+          artwork: [{src: new URL('../who-is-jean-phil/assets/brand/og.jpg', location.href).href, sizes: '1200x630', type: 'image/jpeg'}]});
       }
       msSet('play', () => press());
       msSet('pause', () => pause('session'));

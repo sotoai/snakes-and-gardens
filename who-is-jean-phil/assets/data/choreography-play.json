@@ -1,8 +1,9 @@
 {
  "schema":"sg-play/1",
- "generated":"2026-09-30T11:00:03",
+ "generated":"2026-09-30T15:53:58",
  "from":"autoplay/choreography.json (sg-choreography/1, 2026-09-29T19:08:50) via scratchpad/playbtn/export_play.py",
  "audio":{"el":"#sg-audio","src":"assets/media/who-is-jean-phil-audio.mp3","duration":630.552,"silent_from":628.99},
+ "ending":{"why":"Josh, Sept 30: \"Ending video, let it run to the end\". Play mode only; choreography.json and the render keep their ending.","audio_end":630.552,"clip":"video[data-reprise] (full-result.mp4, 55.008 s)","clip_end":633.12,"credits":[633.12,634.03],"end":634.03,"clock":"past audio_end the player runs the story on the frame clock, from where the audio stopped, to the end action"},
  "resolve":{"section":"main section[data-frame=\"<s>\"]","beat":"the first rendered (getClientRects().length > 0) .beats > .beat[data-frame=\"<b>\"] inside the section","beat_part_rest":".beats > .beat--phone[data-frame=\"<b>\"]:not(.beat--phone-head) (phone stack, under 700px)","el":"section.matches(el) ? section : section.querySelector(el)","media":"an action or unit with media applies only while matchMedia(media).matches; skip it otherwise","rest_y":{"top":"section top (its snap)","beat":"beat top + h/2 - vh/2 (its centre snap)","center":"the element's centre snap (it has scroll-margin-top: --nav-h)"}},
  "rules":{"first_press_top_vh":1,"resume_back_s":2.5,"glide":{"near_vh":2,"near":[0.6,"inOutCubic"],"far":[1.2,"inOutQuart"]},"drift_px":6,"video_drift_s":0.15,"video_check_ms":250,"activate_after_ms":80,"labels":{"idle":"Play","playing":"Pause","paused":"Play","ended":"Replay"},"aria":{"idle":"Play the story with narration","playing":"Pause","paused":"Play the story with narration","ended":"Replay the story with narration"}},
  "ease":{"linear":[0.0,0.0,1.0,1.0],"inOutSine":[0.37,0.0,0.63,1.0],"inOutCubic":[0.65,0.0,0.35,1.0],"inOutQuart":[0.76,0.0,0.24,1.0],"outCubic":[0.33,1.0,0.68,1.0],"outQuad":[0.5,1.0,0.89,1.0],"outExpo":[0.16,1.0,0.3,1.0],"inExpo":[0.7,0.0,0.84,0.0],"outBack":[0.34,1.56,0.64,1.0],"inBack":[0.36,0.0,0.66,-0.56],"site":[0.2,0.7,0.2,1.0],"cards":[0.33,0.0,0.3,1.0]},
@@ -268,8 +269,8 @@
   {"id":"p160","t0":622.93,"t1":623.35,"type":"scrollTo","s":"57","p":{"ease":"inOutCubic","align":"top"}},
   {"id":"p161","t0":622.93,"t1":623.81,"type":"video","s":"57","el":"video[data-reprise]","p":{"mode":"play","src":"full-result.mp4","map":[623.812,45.7],"tape":"T12"}},
   {"id":"p162","t0":623.81,"t1":626.27,"type":"video","s":"57","el":"video[data-reprise]","p":{"mode":"play","src":"full-result.mp4","map":[623.812,45.7],"tape":"T12"}},
-  {"id":"p163","t0":626.27,"t1":630.355,"type":"video","s":"57","el":"video[data-reprise]","p":{"mode":"play","src":"full-result.mp4","map":[623.812,45.7],"sync":"tape"}},
-  {"id":"p164","t0":628.99,"t1":629.9,"type":"scrollTo","s":"58","p":{"ease":"inOutCubic","align":"top"}},
-  {"id":"p165","t0":630.55,"t1":630.55,"type":"end","p":{"label":"Replay","mode":"reader"}}
+  {"id":"p163","t0":626.27,"t1":634.03,"type":"video","s":"57","el":"video[data-reprise]","p":{"mode":"play","src":"full-result.mp4","map":[623.812,45.7],"sync":"tape"}},
+  {"id":"p164","t0":633.12,"t1":634.03,"type":"scrollTo","s":"58","p":{"ease":"inOutCubic","align":"top"}},
+  {"id":"p165","t0":634.03,"t1":634.03,"type":"end","p":{"label":"Replay","mode":"reader"}}
  ]
 }
