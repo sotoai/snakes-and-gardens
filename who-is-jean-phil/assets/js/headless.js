@@ -2,7 +2,7 @@
 // sprays Jean Phil copies; every copy sends coins back; viral moments fly in, hit the monster, spike
 // an imagined coin's line and set off a burst of new copies. Pop a copy and another takes its place.
 // There's no start, no score and no end: it just keeps going, calmly, while it's on screen.
-import {makeMonster} from './monster.js';
+import {makeMonster, blinkAt} from './monster.js';
 
 function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
@@ -36,10 +36,17 @@ function init(root) {
   let copies = [], flights = [], fx = [], cards = [], history = [], marks = [];
   let seeded = false;
   let hAcc = 0, price = 1, spike = null, nextSpawn = .6, nextViral = 6.4, viralIndex = 0, yaw = .2, shake = -9, chomp = -9, gaze = 0, poked = 0;
-  const said = new Set(); const capQ = []; let capUntil = 0;
+  const said = new Set(); const capQ = []; let capUntil = 0, capTimer = 0;
   // It only plays by itself when the page's Autoplay switch is on and motion isn't reduced; taps always work.
   const autoOn = () => !reduced && document.documentElement.dataset.autoplay !== 'off';
-  const rnd = mulberry32(20260928);
+  const SEED = 20260928;
+  let seed = SEED, rnd = mulberry32(SEED);
+  // Hooks (window.__headless, below). selfRun: the page's own loop moves the scene by the wall clock (a reader's page).
+  // Off (auto(false), or any stepTo()): the scene moves only through stepTo(), in fixed 1/60 s steps on a frame grid
+  // (frame n = scene time n/60), and every viral()/popOldest() is logged at its frame so going back replays it exactly.
+  // Captions then follow scene time too (capText/capPrev/capAt; the reader's 140 ms swap included).
+  let selfRun = true, hookVirals = false, n = 0, log = [];
+  let capText = '\u00a0', capPrev = '\u00a0', capAt = -9;
 
   // ---- captions: calm, one at a time
   function sayNow(text) { capQ.length = 0; capUntil = 0; say(text); }
@@ -48,8 +55,18 @@ function init(root) {
     if (!capQ.length || now < capUntil) return;
     const text = capQ.shift();
     cap.classList.add('swap');
-    setTimeout(() => { cap.textContent = text; cap.classList.remove('swap'); }, reduced ? 0 : 140);
+    capTimer = setTimeout(() => { cap.textContent = text; cap.classList.remove('swap'); }, reduced ? 0 : 140);
     capUntil = now + 2800;
+  }
+  // Hook mode: the queue moves on scene time, and the caption shown is a function of it.
+  function pumpScene() {
+    if (!capQ.length || t < capUntil) return;
+    capPrev = capText; capText = capQ.shift(); capAt = t; capUntil = t + 2.8;
+  }
+  function showCap() {
+    const swapping = !reduced && t - capAt < .14, text = swapping ? capPrev : capText;
+    if (cap.textContent !== text) cap.textContent = text;
+    cap.classList.toggle('swap', swapping);
   }
 
   // ---- layout: a chart band on top, the monster in the middle, copies scattered around it
@@ -133,11 +150,13 @@ function init(root) {
     say('An imagined coin jumps. More copies.');
   }
 
-  function step(dt) {
-    t += dt;
+  function step(dt, tNext) {
+    t = tNext ?? t + dt;
+    // Driven by stepTo(), the calm baseline always runs and virals come only from viral() (unless reset asked for them).
+    const baseOn = selfRun ? autoOn() : true, viralOn = selfRun ? autoOn() : hookVirals;
     // a calm baseline: a new copy every couple of seconds
-    if (t >= nextSpawn && autoOn()) { spawn(); nextSpawn = t + (reduced ? 3.2 : 2.2) * (.8 + rnd() * .4); say('It makes copies.', 'makes'); }
-    if (t >= nextViral && autoOn()) { viral(false); nextViral = t + 11 + rnd() * 2; }
+    if (t >= nextSpawn && baseOn) { spawn(); nextSpawn = t + (reduced ? 3.2 : 2.2) * (.8 + rnd() * .4); say('It makes copies.', 'makes'); }
+    if (t >= nextViral && viralOn) { viral(false); nextViral = t + 11 + rnd() * 2; }
     // copies earn
     for (const c of copies) if (t >= c.next) { c.next = t + 6 + rnd() * 4; earn(c); if (!said.has('earn') && t > 2.5) say('Every copy earns a little.', 'earn'); }
     // flights land
@@ -159,6 +178,7 @@ function init(root) {
     for (hAcc += dt; hAcc >= .1; hAcc -= .1) { history.push(price); if (history.length > 260) { history.shift(); marks.forEach(m => m.at--); marks = marks.filter(m => m.at >= -8); } }
     gaze = Math.max(0, gaze - dt * .6);
     yaw = reduced ? .2 : .2 + .5 * Math.sin(t * .25);
+    if (!selfRun) pumpScene();
   }
 
   // ---- drawing
@@ -178,7 +198,7 @@ function init(root) {
     let open = (reduced ? .95 : .9 + .07 * Math.sin(t * .8)) + (t - chomp < .7 ? .35 * Math.sin((t - chomp) / .7 * Math.PI) : 0);
     if (cards.some(c => (t - c.t0) / c.dur > CARD_OUT)) open += .3;
     monster({cx: L.mx + sh, cy: L.my + (reduced ? 0 : Math.sin(t * 1.3) * L.S * .04), S: L.S, LW: Math.max(1.3 * dpr, L.S * .02), yaw, t, open, gaze,
-      shadow: {y: L.my + L.S * 1.95, bob: 0}});
+      blink: selfRun ? undefined : blinkAt(t), shadow: {y: L.my + L.S * 1.95, bob: 0}});
     // things in the air
     for (const f of flights) {
       const k = (t - f.t0) / f.dur; if (k < 0) continue;
@@ -307,15 +327,16 @@ function init(root) {
   canvas.addEventListener('pointerup', e => {
     if (!down) return; const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y); down = null;
     if (moved > 12 || !L) return;
-    interacted();
+    interacted(e);
     const r = canvas.getBoundingClientRect(); tap((e.clientX - r.left) * dpr, (e.clientY - r.top) * dpr);
   });
   canvas.addEventListener('keydown', e => {
-    if (e.key !== ' ' && e.key !== 'Enter') return; e.preventDefault(); interacted();
+    if (e.key !== ' ' && e.key !== 'Enter') return; e.preventDefault(); interacted(e);
     if (e.key === ' ') { if (!cards.length) viral(true); return; }
     const c = copies.reduce((a, c) => (!a || c.born < a.born ? c : a), null); if (c) pop(c);
   });
-  function interacted() { cap.setAttribute('aria-live', 'polite'); wake(); }
+  // A reader's own tap or key hands a hook-driven scene back to the page's loop (the player pauses on that same input).
+  function interacted(e) { if (e && e.isTrusted && !selfRun) api.auto(true); cap.setAttribute('aria-live', 'polite'); wake(); }
   function pop(c) {
     copies.splice(copies.indexOf(c), 1); fx.push({kind: 'pop', slot: c.slot, t0: t, dur: .45});
     spawn(1.1); if (rnd() < .5) spawn(1.5);
@@ -336,6 +357,7 @@ function init(root) {
   // ---- lifecycle: runs only while on screen
   function frame(now) {
     raf = 0;
+    if (!selfRun) return; // the scene clock belongs to stepTo()
     const dt = last ? Math.min(.05, (now - last) / 1000) : 0; last = now;
     if (L) step(dt);
     pumpCap(now);
@@ -344,10 +366,107 @@ function init(root) {
     if (!autoOn() && !cards.length && !flights.length && !fx.length && !spike) return;
     if (visible && !document.hidden) raf = requestAnimationFrame(frame);
   }
-  function wake() { if (!raf && visible && !document.hidden) { last = 0; raf = requestAnimationFrame(frame); } }
+  function wake() { if (selfRun && !raf && visible && !document.hidden) { last = 0; raf = requestAnimationFrame(frame); } }
   new IntersectionObserver(es => { visible = es[es.length - 1].isIntersecting; if (visible) wake(); }, {threshold: [0, .2]}).observe(canvas);
   document.addEventListener('visibilitychange', wake);
   new ResizeObserver(() => { if (layout()) { draw(performance.now()); wake(); } }).observe(canvas);
   (document.fonts?.ready || Promise.resolve()).then(() => draw(performance.now()));
-  window.__headless = {get t() { return t; }, viral: () => viral(true), get copies() { return copies.length; }};
+
+  // ---- hooks for Play mode and the frame renderer (docs: scratchpad/autoplay/hooks-api.md) ----
+  function resetScene(sd) {
+    seed = sd; rnd = mulberry32(sd);
+    t = 0; n = 0; hAcc = 0; price = 1; spike = null; nextSpawn = .6; nextViral = 6.4; viralIndex = 0;
+    yaw = .2; shake = -9; chomp = -9; gaze = 0; poked = 0; last = 0;
+    copies = []; flights = []; fx = []; cards = []; history = []; marks = [];
+    said.clear(); capQ.length = 0; capUntil = 0; clearTimeout(capTimer);
+    capText = capPrev = '\u00a0'; capAt = -9; cap.textContent = '\u00a0'; cap.classList.remove('swap');
+    seeded = true; // no still start with copies out: a reset scene starts empty
+  }
+  const oldest = () => copies.reduce((a, c) => (!a || c.born < a.born ? c : a), null);
+  function popOldestNow() {
+    const c = oldest(); if (!c || !L) return null;
+    const s = L.slots[c.slot];
+    pop(c);
+    return {x: s.x / dpr, y: s.y / dpr, space: 'canvas', slot: c.slot};
+  }
+  function advance(N) { while (n < N) { n++; step(n / 60 - t, n / 60); } }
+  function apply(op) { return op === 'viral' ? (viral(true), null) : popOldestNow(); }
+  function replay(N) { // back in time: the same scene from its reset, with the same events at the same frames
+    const keep = log.filter(e => e.n <= N);
+    resetScene(seed); log = [];
+    for (const e of keep) { advance(e.n); log.push(e); apply(e.op); }
+    advance(N);
+  }
+  // Hook calls paint once, at the end of the task that made them (a microtask): Chrome rasterises a canvas redrawn
+  // twice in one frame a hair differently from one drawn once, so a cold start (reset, events, stepTo in one go) and a
+  // frame-by-frame run must both paint exactly once to give the same pixels. The caption is set at once.
+  let paintQueued = false;
+  function show() {
+    if (!selfRun) showCap();
+    if (paintQueued) return;
+    paintQueued = true;
+    queueMicrotask(() => { paintQueued = false; draw(0); });
+  }
+  const api = {
+    get t() { return t; },
+    get copies() { return copies.length; },
+    // reset(seed = 20260928, {virals}): a fresh scene: the mulberry32 stream re-created from seed, zero copies, scene
+    //   time 0, captions cleared, the event log emptied. virals: true lets a stepped scene bring its own viral cards.
+    reset(sd = SEED, opts = {}) {
+      resetScene(Number.isFinite(+sd) ? +sd : SEED); log = []; hookVirals = !!(opts && opts.virals);
+      if (L) show();
+      return api;
+    },
+    // auto(false): the page's loop stops moving the scene (it is stepped from outside). auto(true): the loop takes
+    //   over again from where the scene is, as a reader's page (the next viral card no sooner than 3 s on).
+    auto(on = true) {
+      on = !!on;
+      if (on === selfRun) return api;
+      selfRun = on;
+      clearTimeout(capTimer); capUntil = 0;
+      if (on) { cap.classList.remove('swap'); if (nextViral < t + 3) nextViral = t + 3; last = 0; wake(); }
+      else { if (raf) { cancelAnimationFrame(raf); raf = 0; } capText = capPrev = cap.textContent; capAt = -9; n = Math.floor(t * 60 + 1e-6); }
+      return api;
+    },
+    // stepTo(sceneT): the scene at frame floor(sceneT * 60), in fixed 1/60 s steps from where it is, or, going back,
+    //   rebuilt from its reset with the events logged up to that frame replayed (later ones are dropped: re-apply them
+    //   as you pass them again). State and caption change at once; the canvas paints at the end of the task. Takes the
+    //   clock (auto(false)).
+    stepTo(sceneT) {
+      if (selfRun) api.auto(false);
+      if (!L && !layout()) return api;
+      const N = Math.max(0, Math.floor((Number(sceneT) || 0) * 60 + 1e-6));
+      if (N < n) replay(N); else advance(N);
+      show();
+      return api;
+    },
+    // viral(): a fast viral card (0.9 s) flies into the mouth: the coin line spikes and a burst of copies follows.
+    viral() {
+      if (!L) return api;
+      if (!selfRun) log.push({n, op: 'viral'});
+      viral(true);
+      if (!selfRun) show();
+      return api;
+    },
+    // popOldest(): pops the oldest copy (Enter's pop: another 1-2 come back after 1.1-1.5 s) and returns where it
+    //   was, {x, y} in CSS px from the canvas's top-left (space: 'canvas'), or null when there is none.
+    popOldest() {
+      if (!L) return null;
+      if (!selfRun) log.push({n, op: 'pop'});
+      const r = popOldestNow();
+      if (!selfRun) show();
+      return r;
+    },
+    // ready(): resolves once the viral cards' art and the fonts are in (a render should wait for it once).
+    ready() {
+      const imgs = Object.values(art).map(im => (im.complete ? Promise.resolve() : new Promise(r => { im.addEventListener('load', r, {once: true}); im.addEventListener('error', r, {once: true}); })));
+      return Promise.all([document.fonts?.ready, ...imgs]).then(() => { if (L) show(); return true; });
+    },
+    get state() {
+      return {t, frame: n, auto: selfRun, seed, copies: copies.map(c => c.slot), flights: flights.length, cards: cards.length,
+        price: Math.round(price * 1e4) / 1e4, caption: cap.textContent, swap: cap.classList.contains('swap'), events: log.slice()};
+    },
+  };
+  window.__headless = api;
+  canvas.__headless = api;
 }

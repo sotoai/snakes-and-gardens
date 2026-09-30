@@ -38,6 +38,10 @@ function init(canvas) {
 
   const pile = document.createElement('canvas'), pctx = pile.getContext('2d');
   let W = 0, H = 0, dpr = 1, L = null, t0 = null, raf = 0, visible = false, done = false, settled = 0;
+  // Hooks (canvas.__hat, below): auto = arrival plays it (noAuto() turns that off); frozen = the loop is off and only
+  // setT() draws, at hat time fT (seconds since the hat's own t0; its clock origin is then 0, so now = fT * 1000).
+  // fIdle: frozen before it ever started (drawn as the idle first frame, and idle again when unfrozen).
+  let auto = true, frozen = false, fT = 0, fIdle = false;
 
   function layout() {
     const r = canvas.getBoundingClientRect();
@@ -166,7 +170,10 @@ function init(canvas) {
     const t = t0 == null ? (reduced ? 99 : 0) : (now - t0) / 1000;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = C.paper; ctx.fillRect(0, 0, W, H);
-    while (settled < N && startAt(order[settled]) + FALL <= t) settle(settled++);
+    if (frozen) { // frame-stepped: the pile is always painted in one pass (a pure function of how many have landed)
+      let k = settled; while (k < N && startAt(order[k]) + FALL <= t) k++;
+      if (k !== settled) { pctx.clearRect(0, 0, W, H); for (settled = 0; settled < k; settled++) settle(settled); }
+    } else while (settled < N && startAt(order[settled]) + FALL <= t) settle(settled++);
     ground(); hatBack();
     // the squares still on the wall, the ghosts of the ones that let go, and the ones in the air
     const air = [];
@@ -196,21 +203,67 @@ function init(canvas) {
   }
 
   function frame(now) {
-    raf = 0; draw(now);
+    raf = 0;
+    if (frozen) return;
+    draw(now);
     if (visible && !document.hidden) raf = requestAnimationFrame(frame);
   }
-  function wake() { if (!reduced && !raf && visible && !document.hidden) raf = requestAnimationFrame(frame); }
+  function wake() { if (!frozen && !reduced && !raf && visible && !document.hidden) raf = requestAnimationFrame(frame); }
   function reset() { settled = 0; pctx.clearRect(0, 0, W, H); }
-  function play() { if (reduced) { draw(performance.now()); return; } reset(); done = false; big?.classList.remove('on'); t0 = performance.now() + 400; wake(); }
+  function play() { if (frozen) { api.setT(0); return; } if (reduced) { draw(performance.now()); return; } reset(); done = false; big?.classList.remove('on'); t0 = performance.now() + 400; wake(); }
   new IntersectionObserver(es => {
     const e = es[es.length - 1], was = visible; visible = e.isIntersecting && e.intersectionRatio >= .6;
+    if (frozen || !auto) { if (visible) wake(); return; } // driven from outside: arrival and exit leave it alone
     if (visible && !was) play(); // replays each time it comes back into view
     if (!e.isIntersecting && !reduced) { t0 = null; reset(); done = false; big?.classList.remove('on'); draw(performance.now()); }
   }, {threshold: [0, .6, .9]}).observe(canvas);
   document.addEventListener('visibilitychange', wake);
-  canvas.addEventListener('click', play);
+  // A reader's own tap or key replays it, and takes a frozen hat back from the player.
+  const byReader = e => { if (frozen && e.isTrusted) api.freeze(false); play(); };
+  canvas.addEventListener('click', byReader);
   canvas.addEventListener('mousedown', e => e.preventDefault());
-  canvas.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); play(); } });
-  new ResizeObserver(() => { if (layout()) draw(performance.now()); }).observe(canvas);
+  canvas.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); byReader(e); } });
+  new ResizeObserver(() => { if (layout()) { if (frozen) paint(); else draw(performance.now()); } }).observe(canvas);
   if (reduced) { big?.classList.add('on'); done = true; }
+
+  // ---- hooks for Play mode and the frame renderer (docs: scratchpad/autoplay/hooks-api.md) ----
+  // setT(sec): the hat at that many seconds since its own t0 (squares let go over 0-3 s, fall 1.15 s each, the big
+  //   line comes on after 4.55 s). Any order: going back un-settles the pile and rebuilds it (same pixels as playing
+  //   through). Frozen: held there (a pure function of sec), painted once at the end of the task; the big line is
+  //   set at once. Not frozen: drawn at once, and the loop runs on from there.
+  // noAuto(on = true): arrival no longer plays it and leaving no longer resets it. freeze(on = true): the loop stops.
+  const hatT = () => (frozen ? fT : t0 == null ? 0 : Math.max(0, (performance.now() - t0) / 1000));
+  // Frozen draws are coalesced to one per task (a microtask), so a frame-stepped render paints each frame once.
+  let paintQueued = false;
+  function paint() {
+    if (paintQueued) return;
+    paintQueued = true;
+    queueMicrotask(() => { paintQueued = false; if (frozen) draw(fT * 1000); });
+  }
+  const api = {
+    setT(sec) {
+      const T = Math.max(0, Number(sec) || 0);
+      if (!L) layout();
+      if (settled && startAt(order[settled - 1]) + FALL > T) reset(); // going back past a landing: rebuild the pile
+      if (!reduced) { done = T > DROP + FALL + .4; big?.classList.toggle('on', done); } // at once, not at the next paint
+      if (frozen) { fT = T; fIdle = false; t0 = 0; paint(); return api; }
+      const now = performance.now();
+      t0 = now - T * 1000;
+      if (!raf) draw(now);
+      wake();
+      return api;
+    },
+    play() { play(); return api; },
+    noAuto(on = true) { auto = !on; return api; },
+    freeze(on = true) {
+      on = !!on;
+      if (on === frozen) return api;
+      if (on) { fIdle = t0 == null; fT = hatT(); frozen = true; t0 = fIdle ? null : 0; if (raf) { cancelAnimationFrame(raf); raf = 0; } reset(); paint(); } // reset: the pile is repainted in one pass
+      else { frozen = false; t0 = fIdle ? null : performance.now() - fT * 1000; wake(); }
+      return api;
+    },
+    get t() { return hatT(); },
+    get state() { const T = hatT(); let k = 0; while (k < N && startAt(order[k]) + FALL <= T) k++; return {t: T, settled: k, big: !!big?.classList.contains('on'), auto, frozen}; },
+  };
+  canvas.__hat = api;
 }

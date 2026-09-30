@@ -5,8 +5,18 @@
 const canvas = typeof document !== 'undefined' ? document.querySelector('canvas.monster') : null;
 if (canvas) init(canvas);
 
+// A blink as a pure function of time (0 open .. 1 shut), for frame-stepped drawing: one 0.22 s blink in every 4.5 s,
+// at a different point in each (golden-ratio steps), none before t = 2.5. The page's own loop keeps its running schedule.
+export function blinkAt(t) {
+  if (!(t >= 2.5)) return 0;
+  const i = Math.floor((t - 2.5) / 4.5), start = 2.5 + i * 4.5 + ((i * .618034) % 1) * 3.6 + .3;
+  const k = (t - start) / .22;
+  return k < 0 || k > 1 ? 0 : 1 - Math.abs(k * 2 - 1);
+}
+
 // The drawing on its own, so other scenes can use the monster too.
-// makeMonster(ctx) returns render({cx, cy, S, LW, yaw, t, open, gaze, shadow: {y, bob}}).
+// makeMonster(ctx) returns render({cx, cy, S, LW, yaw, t, open, gaze, blink, shadow: {y, bob}}).
+// blink (0..1) given = that lid, drawn as is (deterministic); left out = the monster's own running blink schedule.
 export function makeMonster(ctx, reduced = false) {
   const D = Math.PI / 180;
   const C = {
@@ -302,7 +312,8 @@ export function makeMonster(ctx, reduced = false) {
     // the big eye, with a blink now and then
     if (surf(eyeRing, C.bone, null)) {
       surf(slit, C.ink, null);
-      if (!reduced && t > blinkAt) { const k = (t - blinkAt) / .22; if (k > 1) blinkAt = t + 2.5 + ((t * 7.3) % 4); else lid(1 - Math.abs(k * 2 - 1)); }
+      if (o.blink != null) { if (!reduced && o.blink > 0) lid(Math.min(1, o.blink)); }
+      else if (!reduced && t > blinkAt) { const k = (t - blinkAt) / .22; if (k > 1) blinkAt = t + 2.5 + ((t * 7.3) % 4); else lid(1 - Math.abs(k * 2 - 1)); }
       line(eyeRing.map(cam), true, C.ink, LW);
     }
     const sc = stache.map(cam); // blond, like the hair, outlined in ink
@@ -344,9 +355,16 @@ function init(canvas) {
   // ---- state and input ----
   const IDLE = reduced ? 0 : .42; // radians a second, about one turn every 15 s
   let vel = IDLE, dir = 1, dragging = false, lastX = 0, lastT = 0, sample = 0, wheelUntil = 0, gaze = 0;
+  // Hooks (canvas.__monster, below): frozen = the loop is off and only set() draws, at the time it was given (fT).
+  // tOff shifts the loop's clock so a set({t}) without freeze carries on from that t (0 for a reader: unchanged).
+  let frozen = false, fT = 0, tOff = 0;
+  const clock = () => performance.now() / 1000 + tOff;
+  // A reader who grabs a frozen monster gets it back (the player pauses on that same touch).
+  const reclaim = e => { if (frozen && e.isTrusted) api.freeze(false); };
   canvas.style.touchAction = 'pan-y';
   canvas.addEventListener('pointerdown', e => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
+    reclaim(e);
     dragging = true; lastX = e.clientX; lastT = e.timeStamp; sample = 0;
     try { canvas.setPointerCapture(e.pointerId); } catch {}
     wake();
@@ -357,6 +375,7 @@ function init(canvas) {
     yaw += dx * .011;
     sample = sample * .4 + (dx * .011 / dt) * .6;
     lastX = e.clientX; lastT = e.timeStamp;
+    if (frozen) paint();
   });
   const release = e => {
     if (!dragging) return;
@@ -372,8 +391,10 @@ function init(canvas) {
   canvas.addEventListener('wheel', e => {
     if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return; // vertical scrolling stays the page's
     e.preventDefault();
+    reclaim(e);
     yaw -= e.deltaX * .006;
     dir = e.deltaX > 0 ? -1 : 1; vel = 0; wheelUntil = performance.now() + 160;
+    if (frozen) paint();
     wake();
   }, {passive: false});
 
@@ -386,12 +407,13 @@ function init(canvas) {
     canvas.width = W; canvas.height = H;
     S = Math.min(W / 3, H / 4.1); cx = W / 2; cy = H * .49;
     LW = Math.max(1.5 * dpr, S * .018);
-    draw(performance.now() / 1000);
+    if (frozen) paint(); else draw(clock());
   }
   let raf = 0, visible = false, last = 0;
   function frame(now) {
     raf = 0;
-    const t = now / 1000, dt = last ? Math.min(.05, t - last) : 0; last = t;
+    if (frozen) return;
+    const t = now / 1000 + tOff, dt = last ? Math.min(.05, t - last) : 0; last = t;
     if (!dragging) {
       if (now < wheelUntil) vel = 0;
       else { vel += (dir * IDLE - vel) * (1 - Math.exp(-dt / .9)); yaw += vel * dt; }
@@ -402,19 +424,60 @@ function init(canvas) {
     if (reduced && !dragging && Math.abs(vel) < .01 && gaze < .01) { vel = 0; return; }
     if (visible && !document.hidden) raf = requestAnimationFrame(frame);
   }
-  function wake() { if (!raf && visible && !document.hidden) { last = 0; raf = requestAnimationFrame(frame); } }
+  function wake() { if (!frozen && !raf && visible && !document.hidden) { last = 0; raf = requestAnimationFrame(frame); } }
   new IntersectionObserver(es => { visible = es[0].isIntersecting; if (visible) wake(); }, {rootMargin: '80px'}).observe(canvas);
   document.addEventListener('visibilitychange', wake);
   new ResizeObserver(size).observe(canvas);
 
-  function draw(t) {
+  // pure = drawn only from (t, yaw, vel, gaze): the blink comes from blinkAt(t) instead of the running schedule.
+  // Frozen draws are coalesced to one per task (a microtask): Chrome rasterises a canvas redrawn twice in one frame a
+  // hair differently from one drawn once, and a frame-stepped render must get the same pixels however it got there.
+  let paintQueued = false;
+  function paint() {
+    if (paintQueued) return;
+    paintQueued = true;
+    queueMicrotask(() => { paintQueued = false; if (frozen) draw(fT, true); });
+  }
+  function draw(t, pure = false) {
     if (!W) return;
     const bob = reduced ? 0 : Math.sin(t * 1.3) * .045;
     const open = (reduced ? .95 : .9 + .07 * Math.sin(t * .8)) + Math.min(.22, Math.abs(vel) * .025);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, W, H);
-    monster({cx, cy: H * .49 - bob * S, S, LW, yaw, t, open, gaze, shadow: {y: H * .49 + S * 1.93, bob}});
+    monster({cx, cy: H * .49 - bob * S, S, LW, yaw, t, open, gaze, blink: pure ? blinkAt(t) : undefined, shadow: {y: H * .49 + S * 1.93, bob}});
   }
 
-  canvas.__monster = {spin: a => { yaw = a; draw(performance.now() / 1000); }, get yaw() { return yaw; }};
+  // ---- hooks for Play mode and the frame renderer (docs: scratchpad/autoplay/hooks-api.md) ----
+  // set({yaw, vel, t, gaze}): yaw in radians (0 = facing the camera), vel in rad/s (opens the mouth with speed),
+  //   t in seconds (bob, stalk sway, mouth breathing, blink), gaze 0..1 (default: from |vel|, as the loop would settle).
+  //   Frozen: that is the whole state (a pure function of the arguments; t left out keeps the last t), painted once at
+  //   the end of the task.
+  //   Not frozen: drawn at once, and the loop carries on from there (same clock, same spin direction).
+  // freeze(true): the loop stops and only set() draws; freeze(false) hands it back to the loop from the frozen state.
+  const gazeFor = v => { const q = Math.min(1, Math.max(0, (Math.abs(v) - .6) / 1.2)); return q * q * (3 - 2 * q); };
+  const api = {
+    set(o = {}) {
+      if (Number.isFinite(o.yaw)) yaw = o.yaw;
+      if (Number.isFinite(o.vel)) { vel = o.vel; if (Math.abs(vel) > .05) dir = Math.sign(vel); }
+      gaze = Number.isFinite(o.gaze) ? Math.min(1, Math.max(0, o.gaze)) : gazeFor(vel);
+      if (frozen) { if (Number.isFinite(o.t)) fT = o.t; paint(); return api; }
+      if (Number.isFinite(o.t)) tOff = o.t - performance.now() / 1000;
+      last = 0;
+      draw(clock());
+      wake();
+      return api;
+    },
+    freeze(on = true) {
+      on = !!on;
+      if (on === frozen) return api;
+      if (on) { fT = clock(); frozen = true; if (raf) { cancelAnimationFrame(raf); raf = 0; } dragging = false; paint(); }
+      else { frozen = false; tOff = fT - performance.now() / 1000; last = 0; wake(); }
+      return api;
+    },
+    spin(a) { yaw = a; if (frozen) paint(); else draw(clock()); return api; },
+    get yaw() { return yaw; },
+    get frozen() { return frozen; },
+    get state() { return {yaw, vel, gaze, t: frozen ? fT : clock(), frozen}; },
+  };
+  canvas.__monster = api;
 }
