@@ -121,6 +121,21 @@ function prepare(d) {
     labels: {...LABELS, ...(d.rules && d.rules.labels)},
     aria: {...ARIA, ...(d.rules && d.rules.aria)},
   };
+  // Cuts and fallback lead-ins: an action whose next action on the element starts a different timeline ends in a cut
+  // (cutNext). A fallback lead-in (sync "tape", but cutting to its tape on the audio onset: T02, T03, T04) is silent, so
+  // it is only loosely synced until the cut; one that starts deep in its file is taken early (LOOKAHEAD_DEEP), so its
+  // range and its cut target are fetched well before it comes on screen.
+  for (const a of C.videos) {
+    const nx = C.next.get(a);
+    a.cutNext = !!nx && !still(a) && !still(nx) && !sameAt(a, nx, nx.t0);
+    a.fallback = a.cutNext && a.p.sync === 'tape';
+    a.ahead = a.fallback && pageTime(a, a.t0).pt > DEEP ? LOOKAHEAD_DEEP : LOOKAHEAD;
+    // A cut's target is fetched ahead (warmAt, WARM_AHEAD s before the cue; and, for a fallback lead-in, by the element
+    // itself when the lookahead first takes it, off screen), unless the action itself plays through it (T04's 6.46).
+    const x = a.cutNext ? pageTime(nx, nx.t0 + CUT_HOLD).pt : 0;
+    a.warmCut = a.cutNext && !(x >= pageTime(a, a.t0).pt && x <= pageTime(a, a.t1).pt);
+    a.prefetch = a.fallback && a.warmCut;
+  }
   return C;
 }
 // [[t, v, ease?], ...]: ease applies to the segment ending at that key; def is the default.
@@ -176,9 +191,9 @@ const st = {
   audioWanted: false, audioLive: false,
   ck: {a: -1, perf: 0, last: 0},
   c: {},                // what each component was last set to (cleared by every jump, so the next apply is cold)
-  vs: new Map(),        // owned <video> -> {a, last, seekAt, bench, nudge, pf}
+  vs: new Map(),        // owned <video> -> {a, last, seekAt, nudge, pf, pre, cut, lead, est}
   raf: 0,
-  stats: {frames: 0, clockMax: 0, glides: 0, pauses: [], tape: {}},
+  stats: {frames: 0, clockMax: 0, glides: 0, pauses: [], tape: {}, clips: {}, seeks: {}, cuts: {}},
 };
 
 function setButton(s) {
@@ -256,20 +271,65 @@ function glideTo(y, {wait, t}) {
   st.stats.glides++;
 }
 
-/* ---------------- videos: owned while the track holds them, lips on the mix ---------------- */
+/* ---------------- videos: owned while on screen, one continuous timeline each, lips on the mix ---------------- */
+// Continuous play (Josh, Sept 30: "i want the video to play continuously ... if the video is on screen, the video plays
+// muted"): the track owns every page video for the whole time it is on screen in Play mode (the windows are measured and
+// written into choreography.json, "continuous"), and while on screen a video is always playing, muted, on one timeline:
+// around a tape, page_time = src_in + (t - tape_start) from the moment it comes on screen until it leaves, so it is already
+// running into the tape and runs on after it (looping like the page's own loop past the file's end). Where that timeline
+// would start before the file does, the lead-in runs on its own timeline and the one correction is a cut on the tape's
+// audio onset, seeked ahead of time so it lands on the onset (see "cuts" below). park/hold only ever happen off screen
+// (parked early so a clip is buffered and on its first frame when it comes on).
+//
 // Measured in Chrome: a clip playing at rate 1 holds its offset to the mix within 2 ms; a seek while playing lands about
-// 50 ms late (LEAD); a clip told to play starts about 45 ms later (PRESTART). So each tape clip is aligned once (started
-// early on its cue, or seeked with the lead) and then only nudged: a rate within 8 % of 1, with pitch preservation off
-// (the clips are muted; with it on, every rate change costs Chrome ~20 ms), engaged past 12 ms of drift, released under 4.
-// The audio clock itself stutters for a few frames as it starts, so once it has run steadily for 250 ms a clip still more
-// than 35 ms off is aligned again with one seek.
+// 50 ms late (LEAD); a clip told to play starts about 45 ms later (PRESTART). So each clip is aligned once (started early
+// on its cue, or seeked with the lead) and then only nudged: pitch preservation off (the clips are muted; with it on,
+// every rate change costs Chrome ~20 ms) and a rate a few percent off 1 until it is back.
+//  - On a tape's timeline (the tape itself, and the lead-in and run-out that share its timeline): a rate within 8 % of 1,
+//    engaged past 12 ms of drift, released under 4. The audio clock itself stutters for a few frames as it starts, so once
+//    it has run steadily for 250 ms a clip still more than 35 ms off is aligned again with one seek.
+//  - Any other clip (ambient loops, the grids, and a fallback lead-in until its cut: it is silent, and exactness only
+//    matters from the onset): realigned only when off by more than a frame (1/30 s), by a rate within 10 % of 1, released
+//    under 8 ms; a hard seek only past 0.35 s (a stall), never for a frame or two.
 // (Re)starts: a tape clip waits for the audio's own 'playing' (not the moment play() is called: the audio clock only moves
 // 50-80 ms later), and for its first 1.5 s it is corrected harder (a rate within 25 % of 1). A hard seek leads by what
-// this element's seeks have been taking (LEAD at least; a slow phone decoding from a far keyframe takes longer), and one
-// that still lands off stops hard seeks on that clip for 1.5 s, while the rate closes the gap.
-const LOOKAHEAD = 6, LEAD = .05, PRESTART = .045, TAPE_SEEK = .12, TAPE_ALIGN = .035, TAPE_ON = .012, TAPE_OFF = .004, TAPE_GAIN = 1.5, TAPE_MAX = .08;
+// this element's seeks have been taking (LEAD at least; a slow phone decoding from a far keyframe takes longer; learned
+// only from seeks into data the element already had, so a slow network fetch never inflates it), and one that still lands
+// off stops hard seeks on that clip for 1.5 s, while the rate closes the gap.
+// Slow networks (review, Sept 30; DevTools "Fast 4G", 9 Mbps / 170 ms): a cut's target is fetched before the cut (see
+// "cuts"), a fallback lead-in deep in a preload=none file is taken 15 s ahead, and a cut that still lands late is closed by
+// the rate (within 25 %) for 2 s rather than by a second hard seek.
+const LOOKAHEAD = 6, LOOKAHEAD_DEEP = 15, DEEP = 10, LEAD = .05, PRESTART = .045, TAPE_SEEK = .12, TAPE_ALIGN = .035, TAPE_ON = .012, TAPE_OFF = .004, TAPE_GAIN = 1.5, TAPE_MAX = .08;
 const BOOST_MS = 1500, BOOST_GAIN = 4, BOOST_MAX = .25, LEAD_MAX = .6, BACKOFF_MS = 1500, SEEK_WAIT_MS = 250;
+const LOOSE_ON = 1 / 30, LOOSE_OFF = .008, LOOSE_GAIN = 1.5, LOOSE_MAX = .1, LOOSE_SEEK = .35, SAME = .03, CUT_EST = .008, CUT_HOLD = .02;
+const CUT_EST_MAX = .03, CUT_EARLY = .05, CUT_LATE_MS = 2000, WARM_AHEAD = 8;
 const still = a => a.p.mode === 'park' || a.p.mode === 'hold';
+const tight = a => !!(a.p.tape || (a.p.sync === 'tape' && !a.fallback)); // on a tape's timeline: lips-grade sync
+// Is page time x in data this element already has? (What a seek there costs is then decoding, not the network.)
+function inBuf(el, x) {
+  const b = el.buffered;
+  for (let i = 0; i < b.length; i++) if (b.start(i) <= x + .001 && x < b.end(i) - .1) return true;
+  return false;
+}
+// A range a clip will cut to while it is on screen, fetched ahead by a detached muted <video> of the same URL. Chrome
+// shares a URL's media data between elements: the page element's own seek there then lands from memory (measured at
+// 9 Mbps / 170 ms, the cold open's 10.80: 300 ms cold, 4-5 ms warmed). The warmer is kept (paused on that frame, preload
+// down to metadata so it stops reading ahead) until holdMs after it has the frame, i.e. until just past the cut, so the
+// range stays in use and is not dropped from memory before the cut needs it; at most holdMs + 10 s in all. A browser
+// that does not share only spends the bandwidth.
+function warmAt(el, x, holdMs = 1000) {
+  const url = el.currentSrc || el.querySelector('source')?.src || el.src;
+  if (!url) return;
+  const w = document.createElement('video');
+  let timer = 0;
+  const drop = () => { clearTimeout(timer); w.removeAttribute('src'); try { w.load(); } catch {} };
+  w.muted = true; w.playsInline = true; w.preload = 'auto';
+  w.addEventListener('loadedmetadata', () => { try { w.currentTime = x; } catch { drop(); } }, {once: true});
+  w.addEventListener('seeked', () => { w.preload = 'metadata'; clearTimeout(timer); timer = setTimeout(drop, holdMs); }, {once: true});
+  w.addEventListener('error', drop, {once: true});
+  timer = setTimeout(drop, holdMs + 10000);
+  w.src = url;
+}
 function pageTime(a, t) {
   const p = a.p;
   if (still(a)) return {pt: p.at, play: false};
@@ -283,12 +343,13 @@ function driftOf(el, pt, a) {
   if (w > 0) d = ((d % w) + w * 1.5) % w - w / 2;
   return d;
 }
-// Every grid is a 3D stack (at every width): only its front clip runs; the ones behind wait on their frame.
-function frontOf(el, memo) {
-  const grid = el.closest('.stage-media--grid.is-stack');
-  if (!grid) return null;
-  if (!memo.has(grid)) { const g = SG().grid(grid.dataset.key); memo.set(grid, g && g.stacked ? g.videos[g.index] : null); }
-  return memo.get(grid);
+// Two actions on one element are one timeline at t when they give the same page time there (modulo a loop).
+function sameAt(a, b, t) {
+  if (!a || !b || still(a) || still(b)) return false;
+  const x = pageTime(a, t).pt, y = pageTime(b, t).pt, w = (b.p.mode === 'loop' && b.p.wrap) || (a.p.mode === 'loop' && a.p.wrap) || 0;
+  let d = x - y;
+  if (w > 0) d = ((d % w) + w * 1.5) % w - w / 2;
+  return Math.abs(d) < SAME;
 }
 function pitchFree(el, s) {
   if (s.pf) return;
@@ -296,27 +357,97 @@ function pitchFree(el, s) {
   el.preservesPitch = false;
   if ('webkitPreservesPitch' in el) el.webkitPreservesPitch = false;
 }
+function countSeek(a) { st.stats.seeks[a.id] = (st.stats.seeks[a.id] || 0) + 1; }
+// What this element's seeks take (from the call to 'seeked'): a hard seek leads by it (LEAD at least), a cut is issued
+// that far ahead (CUT_EST until measured: a playing clip seeked to a keyframe of the re-encoded tape windows lands in
+// 3-10 ms in Chrome; never more than CUT_EST_MAX, so a cut is never issued far ahead of its cue). Only seeks into data the
+// element already had are learned from: one that had to wait for the network says nothing about the next.
+function learn(s, took) {
+  s.lead = clamp(s.lead == null ? Math.max(LEAD, took) : s.lead * .6 + took * .4, LEAD, LEAD_MAX);
+  s.est = clamp(s.est == null ? took : s.est * .6 + took * .4, .004, LEAD_MAX);
+}
+const cutEst = s => Math.min(s.est ?? CUT_EST, CUT_EST_MAX);
 // A hard seek on a playing clip, ahead by this element's own seek time (so it lands on the audio), timed for the next one.
 function seekPlaying(el, s, a, h, pt, base) {
-  const t0 = performance.now(), lead = s.lead ?? LEAD;
+  const t0 = performance.now(), lead = s.lead ?? LEAD, buf = inBuf(el, pt + lead * base);
   s.seekAt = t0; s.last = t0; s.nudge = false;
+  countSeek(a);
   if (el.playbackRate !== base) el.playbackRate = base;
   h.at(pt + lead * base, {play: true, rate: base, tolerance: 0}).then(() => {
     if (st.vs.get(el) !== s) return;
-    const took = (performance.now() - t0) / 1000;
-    s.lead = clamp(s.lead == null ? Math.max(LEAD, took) : s.lead * .6 + took * .4, LEAD, LEAD_MAX);
-    if (!a.p.tape || st.state !== 'playing' || audio.paused || !st.audioLive || s.a !== a) return;
+    if (buf) learn(s, (performance.now() - t0) / 1000);
+    if (!tight(a) || st.state !== 'playing' || audio.paused || !st.audioLive || s.a !== a) return;
     const d = driftOf(el, pageTime(a, audio.currentTime).pt, a);
     if (Math.abs(d) > TAPE_SEEK) s.noSeekUntil = performance.now() + BACKOFF_MS; // landed off again: let the rate do it
   }, () => {});
 }
-function cancelPre() { for (const s of st.vs.values()) if (s.pre) { clearTimeout(s.pre); s.pre = 0; } }
+// Cuts: the next action on this element starts a different timeline (the lead-in's one correction on a tape's audio onset,
+// or the cold open's re-cue). The seek is issued ahead of the cue by what this element's seeks take, so the new picture
+// lands on the cue, and the clip plays on from there (no second seek when the next action takes over). Measured in
+// Chrome: a playing clip lands 3-7 ms after the seek, then holds that frame about 40 ms before it moves again, so the
+// target is CUT_HOLD (half that hold) further on: the clip is within ~20 ms of the tape's formula across the hold,
+// where aiming at the cue itself left it 35-39 ms behind for a frame or two.
+// The target is in memory by then: a fallback lead-in taken ahead fetched it before it came on screen, and a clip that is
+// on screen has it warmed (warmAt) WARM_AHEAD s before the cue. If the seek still lands more than CUT_EARLY before the cue,
+// the clip holds the cue's frame and is started PRESTART ahead of the cue (it never runs ahead of the onset); if it lands
+// more than a frame late, a loose clip is not hard-seeked for 2 s and the rate (within 25 %) closes the gap.
+function planCut(el, s, a, h, t, base, frameDt) {
+  const nx = C.next.get(a);
+  if (!nx || still(nx) || !nx.ok() || (s.cut && s.cut.nx === nx) || sameAt(a, nx, nx.t0)) return;
+  const est = cutEst(s);
+  if (nx.t0 - t > est + frameDt + .004) return;
+  const go = () => {
+    if (s.cut) s.cut.timer = 0;
+    if (st.vs.get(el) !== s || st.state !== 'playing' || audio.paused || !st.audioLive) { s.cut = null; return; }
+    const t0 = performance.now(), e = cutEst(s), ta = audio.currentTime;
+    const at = Math.max(nx.t0, ta + e * base) + CUT_HOLD * base; // where the clock will be halfway through the post-seek hold
+    const target = pageTime(nx, at).pt, buf = inBuf(el, target);
+    s.seekAt = t0; s.last = t0; s.nudge = false;
+    countSeek(nx);
+    if (el.playbackRate !== base) el.playbackRate = base;
+    h.at(target, {play: true, rate: base, tolerance: 0}).then(() => {
+      if (st.vs.get(el) !== s) return;
+      const now = performance.now(), took = (now - t0) / 1000, tl = audio.currentTime;
+      if (buf) learn(s, took);
+      const d = driftOf(el, pageTime(nx, tl).pt, nx), early = nx.t0 - tl;
+      let fix = null;
+      if (early > CUT_EARLY && s.cut && s.cut.nx === nx && st.state === 'playing' && !audio.paused) {
+        // landed well before the cue: hold the cue's own frame, then start it PRESTART ahead of the cue
+        fix = 'held';
+        const p0 = pageTime(nx, nx.t0).pt;
+        h.at(p0, {play: false, exact: true});
+        if (s.pre) clearTimeout(s.pre);
+        const start = () => {
+          s.pre = 0;
+          if (st.vs.get(el) !== s || st.state !== 'playing' || audio.paused || !el.paused) return;
+          s.seekAt = performance.now(); h.at(p0, {play: true, rate: base, tolerance: .03});
+        };
+        const wait = (nx.t0 - audio.currentTime - PRESTART) * 1000 / base;
+        if (wait < 4) start(); else s.pre = setTimeout(start, wait);
+      } else if (d < -1 / 30 && !tight(nx)) {
+        fix = 'rate';
+        s.noSeekUntil = s.boostUntil = now + CUT_LATE_MS;
+      }
+      // (for tests: where the cut was issued and landed, and how far the clip sat from the new timeline as it landed)
+      st.stats.cuts[nx.id] = {cue: nx.t0, issued: +ta.toFixed(4), landed: +tl.toFixed(4), took: +took.toFixed(4), d: +d.toFixed(4), buf, fix};
+    }, () => {});
+  };
+  const wait = (nx.t0 - t - est) * 1000 / base;
+  s.cut = {nx, timer: 0};
+  if (wait < 4) go(); else s.cut.timer = setTimeout(go, wait);
+}
+function cancelPre() {
+  for (const s of st.vs.values()) {
+    if (s.pre) { clearTimeout(s.pre); s.pre = 0; }
+    if (s.cut) { if (s.cut.timer) clearTimeout(s.cut.timer); s.cut = null; }
+  }
+}
 function syncVideos(t, now, {cold = false, hold = false} = {}) {
   const sg = SG(), want = new Map();
-  // the ones the track holds at t, and the ones it takes within the next few seconds (parked early, so they are buffered
-  // and on their first frame when their stage comes up)
+  // the ones the track holds at t (every video on screen), and the ones it takes within the next few seconds (parked early,
+  // off screen, so they are buffered and on their first frame when they come on)
   for (const a of C.videos) {
-    if (!a.ok() || a.t1 <= t || a.t0 > t + LOOKAHEAD) continue;
+    if (!a.ok() || a.t1 <= t || a.t0 > t + (a.ahead || LOOKAHEAD)) continue;
     const el = elOf(a); if (!el) continue;
     const live = a.t0 <= t;
     if (live || !want.has(el)) want.set(el, {a, live});
@@ -324,34 +455,44 @@ function syncVideos(t, now, {cold = false, hold = false} = {}) {
   for (const [el] of st.vs) if (!want.has(el)) release(el);
   // the audio is on its way (play() called on buffered audio, not yet sounding): clips start with it, not after it; audio
   // that still has to buffer holds them until it actually plays (the 'playing' event syncs them at once)
-  // (tape clips wait for the audio's own 'playing': their lips must not run ahead of it)
+  // (clips on a tape's timeline wait for the audio's own 'playing': their lips must not run ahead of it)
   const starting = st.audioWanted && !st.audioLive && st.startReady && now - st.startedAt < 500;
   const halted = !st.audioWanted || audio.paused || audio.seeking;
   const stalled = halted || (!st.audioLive && !starting), tapeStalled = halted || !st.audioLive;
-  const base = audio.playbackRate || 1, memo = new Map(), frameDt = st.frameDt || FRAME;
+  const base = audio.playbackRate || 1, frameDt = st.frameDt || FRAME;
   for (const [el, {a, live}] of want) {
     let s = st.vs.get(el);
-    const fresh = cold || !s || s.a !== a;
-    if (!s) st.vs.set(el, s = {a, last: -1e9, seekAt: -1e9, bench: false, nudge: false});
+    // a new action on the same timeline (lead-in -> tape -> run-out), or the one a cut already moved it onto, carries on
+    const carried = !!s && s.a !== a && live && ((s.cut && s.cut.nx === a) || sameAt(s.a, a, t));
+    const fresh = cold || !s || (s.a !== a && !carried);
+    if (!s) st.vs.set(el, s = {a, last: -1e9, seekAt: -1e9, nudge: false});
+    if (s.a !== a && s.cut && s.cut.nx !== a) { if (s.cut.timer) clearTimeout(s.cut.timer); s.cut = null; }
+    if (s.cut && s.cut.nx === a && live) s.cut = null;
     s.a = a;
     const h = sg.video(el);
+    const tt = tight(a);
     let {pt, play} = pageTime(a, live ? t : a.t0);
-    if (!live || hold || (a.p.tape ? tapeStalled : stalled)) play = false;
-    const front = frontOf(el, memo);
-    if (front && front !== el) { // behind the front clip: paused where it is
-      if (fresh || !s.bench || !el.paused) h.at(fresh ? pt : el.currentTime, {play: false, tolerance: fresh ? .02 : 1e9});
-      s.bench = true;
-      continue;
-    }
-    const unbenched = s.bench; s.bench = false;
+    if (!live || hold || (tt ? tapeStalled : stalled)) play = false;
     if (!play) {
-      // parked on the frame the next action starts from (its own park, or the lookahead's): started a moment early, so it
-      // is moving on the cue
+      // A fallback lead-in taken ahead (off screen): the element first fetches its cut target (seeked there, paused), then
+      // parks on the lead-in's first frame, so the cut on the audio onset is a seek into data it already has.
+      if (!live && a.prefetch) {
+        if (!s.warm || s.warm.a !== a) {
+          const nx = C.next.get(a), w = s.warm = {a, busy: true};
+          s.last = now;
+          h.at(pageTime(nx, nx.t0 + CUT_HOLD).pt, {play: false, exact: true})
+            .then(() => { w.busy = false; if (st.vs.get(el) === s) s.last = -1e9; }, () => { w.busy = false; });
+          continue;
+        }
+        if (s.warm.busy) continue;
+      }
+      // parked on the frame the next action starts from (the lookahead's, off screen; or held while the audio waits):
+      // started a moment early, so it is moving on the cue
       // (checked a frame ahead, and timed to PRESTART before the cue wherever the frame tick falls)
       const nx = live ? (still(a) ? C.next.get(a) : null) : a;
       if (!hold && !stalled && st.audioLive && nx && !still(nx) && nx.t0 - t <= PRESTART + frameDt && Math.abs(pageTime(nx, nx.t0).pt - pt) < .03) {
         if (el.paused && !s.pre) {
-          if (nx.p.tape) pitchFree(el, s);
+          pitchFree(el, s);
           const go = () => {
             s.pre = 0;
             if (st.vs.get(el) !== s || st.state !== 'playing' || audio.paused || !el.paused) return;
@@ -362,42 +503,70 @@ function syncVideos(t, now, {cold = false, hold = false} = {}) {
         }
         continue;
       }
-      if (fresh || unbenched || !el.paused || now - s.last >= 250) { s.last = now; s.nudge = false; if (el.playbackRate !== 1) el.playbackRate = 1; h.at(pt, {play: false}); }
+      if (fresh || !el.paused || now - s.last >= 250) { s.last = now; s.nudge = false; if (el.playbackRate !== 1) el.playbackRate = 1; h.at(pt, {play: false}); }
       continue;
     }
     if (el.seeking) continue;
-    const tape = !!a.p.tape, d = driftOf(el, pt, a), hard = tape ? TAPE_SEEK : (C.rules.video_drift_s || .15);
-    if (tape) pitchFree(el, s);
-    const backoff = tape && !fresh && !unbenched && !el.paused && now < (s.noSeekUntil || 0);
-    if (fresh || unbenched || el.paused || (Math.abs(d) > hard && !backoff)) {
-      if (!fresh && !unbenched && !el.paused && now - s.seekAt < 400) continue; // let the last seek land first
-      if (Math.abs(d) > (tape ? .04 : hard)) { seekPlaying(el, s, a, h, pt, base); continue; }
+    if (s.cut && !s.cut.timer) continue; // a cut has been seeked onto the next timeline: that action takes over on its cue
+    pitchFree(el, s);
+    const d = driftOf(el, pt, a), hard = tt ? TAPE_SEEK : LOOSE_SEEK;
+    // (the browser's own loop: a clip sits on its last frame ~50 ms, then holds its first ~40 ms, so it comes out of the wrap
+    // about 0.1 s behind; no seek for that, the rate closes it: no seek or nudge during the wrap, the harder nudge for 0.5 s)
+    const wrapping = a.p.mode === 'loop' && !fresh && !el.paused && (el.currentTime > (el.duration || a.p.wrap) - .08 || el.currentTime < .04);
+    if (wrapping) s.wrapUntil = now + 500;
+    const backoff = !fresh && !el.paused && (now < (s.noSeekUntil || 0) || (tt && now < (s.wrapUntil || 0)));
+    // A loose clip that has fallen behind is hard-seeked only into data it already has: on a slow link a seek into a range
+    // still to come freezes it until the network delivers, it falls further behind, and the next seek does it again. It
+    // plays on from what it has instead (the rate closing what it can), and the seek comes once its own read-ahead covers
+    // the target (measured at 9 Mbps / 170 ms: the 'everywhere' grid froze 1-2.5 s at a time, over and over, before this).
+    const starved = !tt && !fresh && !el.paused && Math.abs(d) > hard && !inBuf(el, pt + (s.lead ?? LEAD) * base);
+    if (fresh || el.paused || (Math.abs(d) > hard && !backoff && !wrapping && !starved)) {
+      if (!fresh && !el.paused && now - s.seekAt < 400) continue; // let the last seek land first
+      if (Math.abs(d) > (fresh || el.paused ? (tt ? .04 : LOOSE_ON) : hard)) { seekPlaying(el, s, a, h, pt, base); continue; }
       s.seekAt = now; s.last = now; s.nudge = false;
       h.at(pt, {play: true, rate: base, tolerance: 1e9});
       continue;
     }
-    if (tape) {
-      if (!st.audioLive) continue;
-      const ad = Math.abs(d), boost = backoff || now - Math.max(s.seekAt, st.liveAt || 0) < BOOST_MS;
+    // an on-screen clip that will cut to a range it does not play through: that range warmed WARM_AHEAD s ahead (once the
+    // audio is running, so it never competes with the mix's own start), even when the element fetched it itself earlier:
+    // Chrome may have dropped that data since (Fast 4G, natural flow: T02's 0.00, in memory at 66.9, had to come off the
+    // network again at the 88.12 cut)
+    if (a.warmCut && st.audioLive && s.warmed !== a) {
+      const nx = C.next.get(a);
+      if (nx.t0 - t < WARM_AHEAD && nx.t0 > t) {
+        s.warmed = a;
+        warmAt(el, pageTime(nx, nx.t0 + CUT_HOLD).pt, (nx.t0 - t) * 1000 / base + 1500);
+      }
+    }
+    planCut(el, s, a, h, t, base, frameDt);
+    if (!st.audioLive || (s.cut && !s.cut.timer) || wrapping) continue; // (a cut just issued: nothing to nudge on the old timeline)
+    const ad = Math.abs(d);
+    let r = base;
+    if (tt) {
+      const boost = backoff || now - Math.max(s.seekAt, st.liveAt || 0) < BOOST_MS;
       if (!backoff && ad > TAPE_ALIGN && st.ck.moved && now - st.liveAt > 250 && now - s.seekAt > 1000) { seekPlaying(el, s, a, h, pt, base); continue; }
       if (!s.nudge && ad > TAPE_ON) s.nudge = true; else if (s.nudge && ad < TAPE_OFF) s.nudge = false;
       const g = boost ? BOOST_GAIN : TAPE_GAIN, cap = boost ? BOOST_MAX : TAPE_MAX;
-      const r = s.nudge ? Math.round(base * (1 - clamp(d * g, -cap, cap)) * 200) / 200 : base;
-      if (r !== el.playbackRate) el.playbackRate = r;
-      // (counted once the start-up alignment has had its chance: 0.6 s after the audio is seen moving)
-      if (now - s.seekAt > 300 && now - st.liveAt > 600) {
-        const k = st.stats.tape[a.id] || (st.stats.tape[a.id] = {n: 0, sum: 0, max: 0, at: 0, over: 0});
-        k.n++; k.sum += ad; if (ad > k.max) { k.max = ad; k.at = +t.toFixed(3); } if (ad > 1 / 30) k.over++;
-      }
-    } else if (now - s.last >= (C.rules.video_check_ms || 250)) {
-      s.last = now;
-      h.at(pt, {play: true, rate: base});
+      if (s.nudge) r = Math.round(base * (1 - clamp(d * g, -cap, cap)) * 200) / 200;
+    } else {
+      const boost = now < (s.boostUntil || 0); // (after a cut that landed late)
+      if (!s.nudge && ad > LOOSE_ON) s.nudge = true; else if (s.nudge && ad < LOOSE_OFF) s.nudge = false;
+      const g = boost ? BOOST_GAIN : LOOSE_GAIN, cap = boost ? BOOST_MAX : LOOSE_MAX;
+      if (s.nudge) r = Math.round(base * (1 - clamp(d * g, -cap, cap)) * 200) / 200;
+    }
+    if (r !== el.playbackRate) el.playbackRate = r;
+    // (counted once the start-up alignment has had its chance: 0.6 s after the audio is seen moving)
+    if (now - s.seekAt > 300 && now - st.liveAt > 600) {
+      const bump = (o, id) => { const k = o[id] || (o[id] = {n: 0, sum: 0, max: 0, at: 0, over: 0}); k.n++; k.sum += ad; if (ad > k.max) { k.max = ad; k.at = +t.toFixed(3); } if (ad > 1 / 30) k.over++; };
+      if (a.p.tape) bump(st.stats.tape, a.id);
+      bump(st.stats.clips, a.id);
     }
   }
 }
 function release(el) {
   const s = st.vs.get(el);
   if (s && s.pre) clearTimeout(s.pre);
+  if (s && s.cut && s.cut.timer) clearTimeout(s.cut.timer);
   st.vs.delete(el);
   unrate(el, s);
   try { SG().video(el).release(); } catch {}
