@@ -59,7 +59,18 @@
 
 <main id="top">
 
-<section data-frame="1" data-frames="1 2 3" data-ref="T01 N01" class="scrolly cold-open" data-scrolly aria-label="Cold open">
+<section class="cover-card" id="cover" aria-label="Who is Jean Phil?">
+  <picture class="cover-medallion">
+    <source media="(min-aspect-ratio: 1/1)" srcset="../who-is-jean-phil/assets/img/cover/cover-medallion-landscape.webp" width="1100" height="1460">
+    <img src="../who-is-jean-phil/assets/img/cover/cover-medallion-portrait.webp" width="1100" height="1594" fetchpriority="high" alt="Jean Phil drawn as a playing card: his blond bob and curled mustache, engraved in an oval medallion on a red lattice of snakes, flowers and eyes.">
+  </picture>
+  <div class="cover-cta">
+    <button type="button" class="cover-play" data-sg-play aria-label="Play the story with narration"><svg class="ai-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path class="spark" d="M9.5 4.5C10.2 9.6 12.4 12.3 17.5 13.5C12.4 14.7 10.2 17.4 9.5 22.5C8.8 17.4 6.6 14.7 1.5 13.5C6.6 12.3 8.8 9.6 9.5 4.5Z"/><path class="spark spark--small" d="M18.5 1.5C18.8 3.7 19.6 4.9 22 5.5C19.6 6.1 18.8 7.3 18.5 9.5C18.2 7.3 17.4 6.1 15 5.5C17.4 4.9 18.2 3.7 18.5 1.5Z"/></svg><span class="label">Play the story</span></button>
+    <a class="cover-scroll" href="#cold-open"><span>or scroll</span><i aria-hidden="true"></i></a>
+  </div>
+</section>
+
+<section data-frame="1" data-frames="1 2 3" data-ref="T01 N01" class="scrolly cold-open" id="cold-open" data-scrolly aria-label="Cold open">
   <div class="stage">
     <div class="stage-bg" style="--poster:url('../who-is-jean-phil/assets/media/full-result-poster.webp')"></div>
     <figure class="stage-media is-active" data-key="donkey">

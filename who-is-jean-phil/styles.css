@@ -47,7 +47,7 @@ strong{font-weight:400;color:var(--blond)}
 .skip:focus{transform:none}
 
 /* ---------- Masthead ---------- */
-.masthead{position:fixed;inset:0 0 auto;z-index:50;display:flex;align-items:center;gap:24px;height:56px;padding:0 var(--gutter);background:linear-gradient(rgba(12,11,10,.86),rgba(12,11,10,0));transition:background .4s}
+.masthead{position:fixed;inset:0 0 auto;z-index:50;display:flex;align-items:center;gap:24px;height:56px;padding:0 var(--gutter);padding-left:max(var(--gutter),env(safe-area-inset-left));padding-right:max(var(--gutter),env(safe-area-inset-right));background:linear-gradient(rgba(12,11,10,.86),rgba(12,11,10,0));transition:background .4s}
 .masthead.solid{background:rgba(12,11,10,.92);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
 .brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:var(--bone)}
 .brand-mark{width:24px;height:27px}
@@ -59,7 +59,7 @@ strong{font-weight:400;color:var(--blond)}
 .reels a.on b{color:var(--ink)}
 .controls{display:flex;gap:8px}
 .controls button{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:rgba(12,11,10,.5);border-radius:999px;padding:6px 12px;font-family:var(--mono);font-size:11px;color:var(--bone-2)}
-.controls button:hover{border-color:var(--blond);color:var(--bone)}
+.controls button:not(.play-toggle):hover{border-color:var(--blond);color:var(--bone)}
 #sound-toggle .dot{width:8px;height:8px;border-radius:50%;background:var(--mute)}
 #sound-toggle[aria-pressed="true"] .dot{background:var(--red);box-shadow:0 0 0 3px rgba(253,0,1,.25)}
 .progress{position:absolute;left:0;right:0;bottom:-1px;height:2px}
@@ -132,6 +132,33 @@ h1 span:last-child{font-style:italic;text-transform:none;letter-spacing:-.04em}
 .art-credit{position:absolute;right:var(--gutter);bottom:18px;z-index:4;opacity:.75}
 .art-credit a{color:inherit}
 
+/* ---------- Cover: the video opener's playing card, first thing on the page ---------- */
+/* The lattice is the section's background; the medallion (with the engraved Jean Phil mark) is its own image, sized to
+   leave the lower band for Play and the scroll cue. A deep-red floor calms the lattice under them. */
+.cover-card{position:relative;height:100vh;height:100svh;min-height:340px;overflow:hidden;background:#f51713 url(assets/img/cover/cover-pattern-portrait.webp) 50% 47%/cover no-repeat}
+.cover-card::after{content:"";position:absolute;inset:auto 0 0;height:34%;background:linear-gradient(rgba(196,0,0,0),rgba(196,0,0,.78) 58%,rgba(150,0,0,.92));pointer-events:none}
+.cover-medallion{position:absolute;z-index:1;left:50%;top:calc(43% + 14px);transform:translate(-50%,-50%);display:block;height:min(58svh,calc(76vw * 1594 / 1100));aspect-ratio:1100/1594}
+.cover-medallion img{display:block;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 12px 28px rgba(70,0,0,.32))}
+.cover-cta{position:absolute;z-index:2;left:0;right:0;bottom:max(calc(3.5svh + env(safe-area-inset-bottom)),18px);display:flex;flex-direction:column;align-items:center;gap:14px}
+.cover-play{display:inline-flex;align-items:center;gap:10px;padding:14px 26px 14px 21px;border:0;border-radius:999px;background:var(--blond);color:var(--ink);font-family:var(--mono);font-size:13px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;box-shadow:0 8px 26px rgba(60,0,0,.38);transition:background-color .25s,transform .25s var(--ease)}
+.cover-play .ai-icon{flex:none;width:17px;height:17px;fill:currentColor;overflow:visible}
+@media (hover:hover){.cover-play:hover{background:#f3e2b4;transform:translateY(-1px)}}
+.cover-play:focus-visible,.cover-scroll:focus-visible{outline:2px solid #f2efe8;outline-offset:3px}
+.cover-scroll{display:flex;flex-direction:column;align-items:center;gap:7px;color:#f2efe8;text-decoration:none;font-family:var(--mono);font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;opacity:.86}
+.cover-scroll i{display:block;width:1px;height:30px;background:linear-gradient(#f2efe8,rgba(242,239,232,0));transform-origin:top;animation:cover-cue 2.4s var(--ease) infinite}
+@keyframes cover-cue{0%{transform:scaleY(0);opacity:0}25%{opacity:1}65%{transform:scaleY(1);opacity:1}100%{transform:scaleY(1) translateY(8px);opacity:0}}
+@media (prefers-reduced-motion:reduce){.cover-scroll i{animation:none}}
+@media (min-aspect-ratio:1/1){
+  .cover-card{background-image:url(assets/img/cover/cover-pattern-landscape.webp);background-position:50% 50%}
+  .cover-card::after{height:30%}
+  .cover-medallion{top:calc(42% + 18px);height:min(64svh,calc(44vw * 1460 / 1100));aspect-ratio:1100/1460}
+}
+@media (min-aspect-ratio:1/1) and (max-height:560px){
+  .cover-medallion{height:50svh;top:calc(36% + 18px)}
+  .cover-cta{gap:8px}
+  .cover-play{padding:10px 20px 10px 16px}
+}
+
 /* ---------- Reel cards ---------- */
 .reel-card{position:relative;min-height:100vh;min-height:100svh;display:grid;place-content:center;text-align:center;padding:96px var(--gutter);background:radial-gradient(ellipse at 50% 60%,#211d17 0%,var(--ink) 62%);overflow:hidden;scroll-margin-top:0}
 .reel-card::before,.reel-card::after{content:"";position:absolute;left:50%;width:1px;height:18vh;background:linear-gradient(transparent,var(--line))}
@@ -147,6 +174,18 @@ h1 span:last-child{font-style:italic;text-transform:none;letter-spacing:-.04em}
 .reel-card--red .numeral{-webkit-text-stroke-color:rgba(0,0,0,.55)}
 .reel-card--red::before,.reel-card--red::after{background:linear-gradient(transparent,rgba(0,0,0,.35))}
 .reel-card.in .numeral{animation:numeral 1.6s var(--ease) both}
+/* the opener's lattice (snakes, flowers, hidden eyes) behind every numeral, so the chapters read as one family;
+   the centre is shaded so the numeral and title stay clean */
+.reel-card{background:radial-gradient(ellipse 52% 44% at 50% 50%,rgba(12,11,10,.86) 0%,rgba(12,11,10,.62) 55%,rgba(12,11,10,.18) 100%),url(assets/img/reel/reel-lattice-portrait.webp) center/cover no-repeat,var(--ink)}
+.reel-card--red{background:radial-gradient(ellipse 74% 46% at 50% 54%,rgba(253,0,1,.97) 0%,rgba(253,0,1,.9) 56%,rgba(253,0,1,0) 100%),url(assets/img/reel/reel-lattice-red-portrait.webp) center/cover no-repeat,var(--red)}
+/* a firmer outline so the numeral survives the lattice and a thumbnail */
+.reel-card .numeral{-webkit-text-stroke:1.6px rgba(242,236,225,.74)}
+.reel-card--red .numeral,.reel-card--coda .numeral{-webkit-text-stroke:2px rgba(0,0,0,.78)}
+.reel-card--coda .reel-line{max-width:min(30rem,66vw)}
+@media (min-aspect-ratio:1/1){
+  .reel-card{background-image:radial-gradient(ellipse 44% 52% at 50% 50%,rgba(12,11,10,.86) 0%,rgba(12,11,10,.62) 55%,rgba(12,11,10,.18) 100%),url(assets/img/reel/reel-lattice-landscape.webp)}
+  .reel-card--red{background-image:radial-gradient(ellipse 46% 60% at 50% 52%,rgba(253,0,1,.96) 0%,rgba(253,0,1,.84) 50%,rgba(253,0,1,0) 100%),url(assets/img/reel/reel-lattice-red-landscape.webp)}
+}
 @keyframes numeral{from{opacity:0;letter-spacing:.1em;filter:blur(8px)}to{opacity:1}}
 
 /* ---------- Prose sections ---------- */
@@ -555,7 +594,7 @@ main,#masthead{-webkit-tap-highlight-color:transparent}
 
 /* ============ v4: one screen per frame, snapping like a TikTok feed ============ */
 html.snap{scroll-snap-type:y mandatory}
-.slide,.frame,.reel-card,.title-card,.credits,.garden,.notes{scroll-snap-align:start;scroll-snap-stop:always}
+.cover-card,.slide,.frame,.reel-card,.title-card,.credits,.garden,.notes{scroll-snap-align:start;scroll-snap-stop:always}
 .beat{scroll-snap-align:center;scroll-snap-stop:always}
 .slide,.frame{min-height:100vh;min-height:100svh;display:flex;flex-direction:column;justify-content:center;box-sizing:border-box;padding:calc(var(--nav-h,56px) + 24px) var(--gutter) max(12svh,64px)!important}
 .slide-in{width:100%;max-width:34rem;margin:0 auto}
@@ -1045,7 +1084,7 @@ video::cue{font-family:var(--sans,system-ui),system-ui,sans-serif;font-size:clam
 .market.frame{padding-bottom:max(5svh,32px)!important}
 @media (max-height:980px){.market.frame .market-chart svg{height:150px}.market.frame .market-stats{margin:.6rem 0}}
 @media (max-width:560px){.market.frame .market-chart svg{height:120px}}
-.reel-card--coda .numeral{-webkit-text-stroke:1.5px rgba(0,0,0,.6)}
+.reel-card--coda .numeral{-webkit-text-stroke:2px rgba(0,0,0,.78)}
 /* Phone grids: slightly larger cells, and chips that wrap instead of cutting off the play counts */
 @media (max-width:860px){
   .stage-media .grid4 video{height:max(96px,calc((100svh - var(--nav-h,52px) - 430px) / 2))}
@@ -1274,13 +1313,18 @@ video::cue{font-family:var(--sans,system-ui),system-ui,sans-serif;font-size:clam
    The masthead makes room for it without wrapping at any width from 320px: the reel names hide up to 1279px (from
    1080px); at 561-640px the controls take the phone type size; up to 480px the reel numerals are 24px targets
    (WCAG 2.5.8) with no gap; below 412px the sound pill shows its dot alone (it keeps its accessible name), so the
-   Play pill always reads "Play". */
+   Play pill always reads "Play".
+   (iPhone fixes, Sept 30) Its :hover tints only where there is hover (hover:hover): iOS keeps :hover on after a tap, so
+   the paused pill kept the pale hover fill and the playing one the hover tint. The masthead's generic button hover
+   (.controls button:hover) leaves it out, so a touch screen shows the pill exactly as its state says. The masthead pads
+   by the safe-area insets where they are wider than the gutter (viewport-fit=cover: in landscape on a notched iPhone
+   the controls sat under the sensor housing). */
 .controls .play-toggle{position:relative;overflow:hidden;flex:none;gap:6px;padding:6px 13px 6px 10px;white-space:nowrap;border-color:var(--blond);background:var(--blond);color:var(--ink);transition:background-color .25s,color .25s,border-color .25s}
-.controls .play-toggle:hover{border-color:#f3e2b4;background:#f3e2b4;color:var(--ink)}
+@media (hover:hover){.controls .play-toggle:hover{border-color:#f3e2b4;background:#f3e2b4;color:var(--ink)}}
 .play-toggle .ai-icon{flex:none;width:14px;height:14px;fill:currentColor;overflow:visible}
 .play-toggle .label{min-width:5ch;text-align:center}
 .controls .play-toggle[data-state="playing"]{background:rgba(12,11,10,.62);color:var(--blond)}
-.controls .play-toggle[data-state="playing"]:hover{background:rgba(232,205,140,.14);border-color:var(--blond);color:#f3e2b4}
+@media (hover:hover){.controls .play-toggle[data-state="playing"]:hover{background:rgba(232,205,140,.14);border-color:var(--blond);color:#f3e2b4}}
 .play-toggle::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:currentColor;transform-origin:left;transform:scaleX(var(--play-p,0));opacity:0;transition:opacity .3s;pointer-events:none}
 .play-toggle[data-state="playing"]::after,.play-toggle[data-state="paused"]::after{opacity:.85}
 .play-toggle[data-state="playing"] .spark--small{animation:play-twinkle 2.4s ease-in-out infinite}

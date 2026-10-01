@@ -800,8 +800,9 @@ let storyPausedAt = -Infinity, downAt = -Infinity;
 const evTime = e => (e.timeStamp > 0 && e.timeStamp <= performance.now() + 50 ? e.timeStamp : performance.now());
 addEventListener('pointerdown', e => { downAt = evTime(e); }, {capture: true, passive: true});
 function onFirstGesture(e) {
-  // The Play button starts the story's own audio: pressing it is not a tap for page sound (nor is anything while it plays).
-  if (driven() || (e.target instanceof Element && e.target.closest('#play-toggle'))) return;
+  // A Play button (the masthead's, the cover's) starts the story's own audio: pressing it is not a tap for page sound (nor
+  // is anything while it plays).
+  if (driven() || (e.target instanceof Element && e.target.closest('#play-toggle,[data-sg-play]'))) return;
   if ((e.type === 'keydown' ? evTime(e) : downAt) <= storyPausedAt) return;
   if (e.type === 'keydown') {
     if (soundBtn.contains(e.target) || NOT_GESTURES.includes(e.key) || e.metaKey || e.ctrlKey) return;
@@ -1773,16 +1774,21 @@ function ensureMedia(v) {
   if (v.preload !== 'auto') { const was = v.preload; v.preload = 'auto'; if (was === 'none' && v.networkState !== HTMLMediaElement.NETWORK_LOADING) v.load(); }
 }
 const clampMedia = (v, t) => { const d = v.duration; return Number.isFinite(d) && d > 0 ? Math.min(t, Math.max(0, d - .03)) : t; };
-function seekMedia(v, t) {
+// fast: fastSeek() where the browser has it (WebKit: to a keyframe near t, no decoding forward from the last one).
+function seekMedia(v, t, fast = false) {
   if (Math.abs(v.currentTime - t) < 1e-4) return v.seeking ? onceOr(v, ['seeked', 'error', 'emptied'], 5000) : Promise.resolve();
   const p = onceOr(v, ['seeked', 'error', 'emptied'], 5000);
-  v.currentTime = t;
+  if (fast && typeof v.fastSeek === 'function') v.fastSeek(t); else v.currentTime = t;
   return p;
 }
 // Take a video for the story: begun (so applyStart never jumps it), muted, at page time t; playing or held.
 // play: re-seeks only past .15 s of drift (a looping clip's drift wraps); held: within .02 s; exact: always, to 0.1 ms.
+// fast: a seek it needs is a fastSeek() (WebKit), landing near t rather than on it (the player closes the rest).
 // Resolves once the frame is there (after 'seeked'), with the element's currentTime.
-function videoAt(v, t, {play = false, exact = false, tolerance = null, rate = 1} = {}) {
+// A play() the browser refuses (NotAllowedError: iOS Low Power Mode, an in-app browser that wants a tap) marks the
+// element (v.__sgBlocked = when), so the player holds it instead of asking again every frame; a play() that goes
+// through clears it. A clip still waiting for its metadata shares one wait (no new listeners and timers per call).
+function videoAt(v, t, {play = false, exact = false, tolerance = null, rate = 1, fast = false} = {}) {
   sg.owned.add(v);
   v.dataset.begun = '1';
   if (play) delete v.dataset.userPaused;
@@ -1794,16 +1800,17 @@ function videoAt(v, t, {play = false, exact = false, tolerance = null, rate = 1}
   let ready;
   if (v.readyState < 1) {
     ensureMedia(v);
-    ready = onceOr(v, ['loadedmetadata', 'error'], 10000)
-      .then(() => (v.__sgWant === want && sg.owned.has(v) && v.readyState > 0 ? seekMedia(v, clampMedia(v, want)) : null));
+    v.__sgMeta ||= onceOr(v, ['loadedmetadata', 'error'], 10000).then(() => { v.__sgMeta = null; });
+    ready = v.__sgMeta
+      .then(() => (v.__sgWant === want && sg.owned.has(v) && v.readyState > 0 ? seekMedia(v, clampMedia(v, want), fast) : null));
   } else {
     const target = clampMedia(v, want), dur = v.duration;
     let d = v.currentTime - target;
     if (v.loop && Number.isFinite(dur) && dur > 0) d = ((d % dur) + dur * 1.5) % dur - dur / 2;
     const tol = tolerance != null ? tolerance : exact ? 1e-4 : play ? .15 : .02;
-    ready = Math.abs(d) > tol || (exact && v.seeking) ? seekMedia(v, target) : Promise.resolve();
+    ready = Math.abs(d) > tol || (exact && v.seeking) ? seekMedia(v, target, fast) : Promise.resolve();
   }
-  if (play && v.paused) v.play().catch(() => {});
+  if (play && v.paused) v.play().then(() => { delete v.__sgBlocked; }, e => { if (e && e.name === 'NotAllowedError') v.__sgBlocked = performance.now(); });
   return ready.then(() => v.currentTime);
 }
 // Hand it back: the video manager (or the swap, or the reprise's held face) decides again.
