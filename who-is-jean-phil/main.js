@@ -1106,6 +1106,7 @@ dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close();
   const clampT = (v, t) => Math.max(0, Math.min(t, (Number.isFinite(v.duration) ? v.duration : 55) - .05));
   function sync() {
     if (!swap.playing) return;
+    if (driven() && window.__sgWK) { raf = requestAnimationFrame(sync); return; } // the WebKit player keeps the two layers on one timeline itself: no seek here on a clip it plays (the loop runs on, as before, into reader mode)
     const d = swap.over.currentTime - swap.under.currentTime;
     if (Math.abs(d) > .12) swap.over.currentTime = clampT(swap.over, swap.under.currentTime);
     raf = requestAnimationFrame(sync);

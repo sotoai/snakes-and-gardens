@@ -20,7 +20,10 @@
 // comes back with the reader's own next scroll.
 //
 // Reader mode (Play never pressed) is untouched: until the first press this module only listens, and every listener
-// returns at once. Nothing ever starts on its own.
+// returns at once. Nothing ever starts on its own. (On a phone-class WebKit, WK below, it also reads its learned start lead
+// from localStorage and times requestAnimationFrame from the moment it runs to 1.7 s after the page's load event (again on
+// coming back to the tab or after a pause, only if that gave no reading): the next press's evidence of Low Power Mode.
+// Nothing on the page changes.)
 
 import {selectPeriod} from '../who-is-jean-phil/assets/js/market-data.mjs';
 
@@ -42,6 +45,13 @@ const coarse = matchMedia('(pointer: coarse)');
 let touched = false;
 const touchy = () => touched || coarse.matches;
 const WEBKIT = 'GestureEvent' in window;
+// (iPhone stutter fix, Oct 1) WK: the WebKit clip driver (see "videos", below), on a phone-class WebKit: iOS (every browser
+// there is WebKit), or an iPad presenting a desktop UA (its pointer is still coarse). Desktop Safari keeps the old driver:
+// the new one was measured on iOS only, and its cues rest on stills. ?wk=0: the old driver on a phone (A/B); ?wk=1: the
+// WebKit driver in any browser (its logic can then be tested in headless Chrome).
+const WKQ = new URLSearchParams(location.search).get('wk');
+const WK_PHONE = WEBKIT && (coarse.matches || navigator.maxTouchPoints > 1 || /iP(hone|ad|od)/.test(navigator.userAgent));
+const WK = WKQ === '1' || (WK_PHONE && WKQ !== '0');
 
 /* ---------------- easing ---------------- */
 function bezier(x1, y1, x2, y2) {
@@ -142,6 +152,19 @@ function prepare(d) {
   for (const a of C.videos) {
     const nx = C.next.get(a);
     a.cutNext = !!nx && !still(a) && !still(nx) && !sameAt(a, nx, nx.t0);
+    // (WK) lips: a tape, or a lead-in already on its tape's timeline (within W_ADOPT of it: T04's lead-in is 36 ms off).
+    // Run-outs and the fallback lead-ins that cut on the onset (T02, T03) are loose. onset: when the tape's voice starts.
+    a.lips = WK && (!!a.p.tape || (a.p.sync === 'tape' && !still(a) && !!nx && !!nx.p.tape && (!a.cutNext || sameAt(a, nx, nx.t0, W_ADOPT))));
+    a.onset = !WK ? null : a.p.tape ? Math.max(a.t0, a.p.map[0]) : a.lips ? Math.max(nx.t0, nx.p.map[0]) : null;
+    // (WK) an adopted lead-in takes its tape's own timeline (T04's ran 36 ms ahead of it, and the hand-over carried that
+    // into the tape: +82 ms where the start alone was +46), and where that timeline reaches the file's first frame after
+    // the action begins, it begins there (a clip cannot sit before its first frame; started on the action's own t0 it
+    // ran that 36 ms early all the same)
+    if (a.lips && !a.p.tape && a.cutNext) {
+      a.p = {...a.p, map: [nx.p.map[0], nx.p.map[1]]}; a.cutNext = false;
+      const t00 = nx.p.map[0] - nx.p.map[1] / (nx.p.rate || 1);
+      if (t00 > a.t0) a.t0 = Math.min(t00, nx.t0);
+    }
     a.fallback = a.cutNext && a.p.sync === 'tape';
     a.ahead = a.fallback && pageTime(a, a.t0).pt > DEEP ? LOOKAHEAD_DEEP : LOOKAHEAD;
     // A cut's target is fetched ahead (warmAt, WARM_AHEAD s before the cue; and, for a fallback lead-in, by the element
@@ -207,8 +230,9 @@ const st = {
   ck: {a: -1, perf: 0, last: 0},
   c: {},                // what each component was last set to (cleared by every jump, so the next apply is cold)
   vs: new Map(),        // owned <video> -> {a, last, seekAt, nudge, pf, pre, cut, lead, est}
+                        // (WK also: cue, free, outAt, fix, startAt, startLead, startBuf; see the WebKit driver)
   raf: 0,
-  stats: {frames: 0, clockMax: 0, glides: 0, pauses: [], tape: {}, clips: {}, seeks: {}, cuts: {}},
+  stats: {frames: 0, clockMax: 0, glides: 0, pauses: [], tape: {}, clips: {}, seeks: {}, cuts: {}, fixes: {}},
 };
 
 function setButton(s) {
@@ -382,6 +406,173 @@ const BOOST_MS = 1500, BOOST_GAIN = 4, BOOST_MAX = .25, LEAD_MAX = .6, BACKOFF_M
 const LOOSE_ON = 1 / 30, LOOSE_OFF = .008, LOOSE_GAIN = 1.5, LOOSE_MAX = .1, LOOSE_SEEK = .35, SAME = .03, CUT_EST = .008, CUT_HOLD = .02;
 const CUT_EST_MAX = .03, CUT_EARLY = .05, CUT_LATE_MS = 2000, WARM_AHEAD = 8;
 const FAST_MAX = .5, BLOCKED_MS = 500, GRID_WAKE = .6;
+// The WebKit clip driver (iPhone stutter fix, Oct 1; WK). Everything above was measured in Chrome and does not hold on
+// WebKit: a playbackRate write on a playing clip stalls it (WebKit bug 163433; ~22 ms a write in the iOS 18.3 Simulator,
+// and a real iPhone at 1.25 advanced 0.14-0.91 s a second), a seek on a playing clip freezes the picture (median 116 ms in
+// the Simulator, 284 ms on the phone) and lands behind, and currentTime is an estimate that a rate write or a seek
+// disturbs. So the loop above never converged there: tape clips ran at 1.7 seeks and 13 rate writes a second and showed
+// 12-16 frames a second, while a clip it never touched held its offset to the mix within 0.1 ms for 20 s. On WK:
+//  - the driver never writes playbackRate and never seeks a clip that is playing (nor seeks one in the same task as its
+//    play()). One actuator, wkCue: the clip is paused, seeked PAUSED and exactly to the frame the story shows at a cue
+//    time, and told to play its start lead before that cue. Every cut is one (the picture rests on the cut's first frame
+//    for the lead + W_SEEK), and so are a tape-timeline clip found off its frame at a start, a loose clip taken cold more
+//    than FAST_MAX off (paused or playing: a fast seek lands on a keyframe seconds away in the loose files, and a playing
+//    seek is what this driver exists to avoid), a stack card coming back into view, and the rare correction. Not the
+//    driver's: the browser's own loop wrap (WebKit seeks a looping clip to 0 itself, playing) and main.js's handler that
+//    puts #swap-over on #swap-under's time when under's seek ends (it stands down while the player owns #swap-over);
+//  - starts: a clip the lookahead parked plays its start lead (wkLeadOf, below) before its cue (the timer armed W_ARM ahead,
+//    so a frame lost to a scroll move does not step over it: one did, 116 ms long, and the clip came on with a cue's still
+//    instead) from where it is parked; a lips clip held while the audio waits (a press, a resume) is parked its start lead
+//    ahead of the story and plays on the audio's 'playing' if the frame it would then land on is inside its band (the
+//    'playing' comes a little after the audio's clock has moved; a start that would land outside the band is cued instead);
+//    a loose clip starts where it is; a clip with no metadata yet is held, not started (main.js would seek it once its
+//    metadata lands, by then playing);
+//  - wk.start = what play() takes to move a clip + W_BIAS (the picture is aimed 30 ms early: ITU-R BT.1359, a late
+//    picture is noticed from 45 ms, an early one only from 125). Learned (wkSample): each start notes how far ahead of the
+//    story its frame was, and W_BLIND_MS later (currentTime is not to be trusted sooner), once the audio has run 600 ms,
+//    the error read then gives the lag; a start about to be corrected sooner than that is read first (from W_LAG_GATE_MS:
+//    the cold open's first start is corrected 550 ms in, and that sample used to be thrown away). The median of the last
+//    5 starts into data the element already had, the default counted among them until there are 5 (the first start, in
+//    the press, ran 232 ms late in the Simulator under the page's own start-up work, the next ones 57-90 ms: one slow start
+//    must not set the lead). Kept in localStorage for the next visit on the device, but only the last W_KEEP lags, for
+//    W_KEEP_MS, from this build (WK_VER), and recomputed with the default counted: a stale slow session (a hot phone, a test
+//    with a delay) moves the next visit's first starts, and two of that visit's own starts put it right. Lags up to
+//    W_LAG_MAX are learned and the lead may grow to W_START_MAX (the real phone starts a playing seek in 300-800 ms). Not
+//    learned from: a start that came late, and clips started together (the stacks' three cards at once took 79-101 ms each,
+//    a clip alone 56-74; a lips clip starts alone);
+//  - each element keeps its own last lag (s.lag), and once it has one its starts and cues are aimed with it, in both
+//    directions (wkLeadOf): the correction after a slow start lands in band (the uniform 300 ms delay: +24 ms at the laugh),
+//    and a fast element is not held to a stale slow lead (stored lags of 0.45 s and a real lag of 0.06 left the cold open
+//    0.42 s early through the laugh). A correction whose own start, read, leaves the picture past W_EARLY_FIX ahead (its
+//    lag was a one-off: the first start under the press's load took 0.21 s, the correction's 0.07, and T01 ran 167 ms early
+//    to its cut, inside the hold band) is cued once more at once, with the lag just read, voice or no voice;
+//  - a start that comes late (its timer under a busy main thread: the press's own work held the cold open's by up to
+//    280 ms; or a slow seek) would put the clip that far behind. A lips clip is not started then: it is cued again, a
+//    little further on (it stays the still it already is), twice at most; once its voice is heard only past W_LATE_HOLD (a
+//    start up to that late lands in the hold band; a second cue would freeze it over the words); a loose clip starts, late
+//    by that much;
+//  - lips clips (a tape, and a lead-in on its tape's timeline) are watched against a wide band, d = clip - story, the
+//    story being the audio's own time (what is heard; the frame clock can hold ahead of it for up to HOLD_FAR after a
+//    backward step, see clock(), and a clip in time with the sound must not be cued for that): while a correction would
+//    still end W_QUIET before the voice, -W_LATE..+W_EARLY; once the voice is heard only past ITU acceptability,
+//    -W_LATE_HOLD..+W_EARLY_HOLD. Outside it for W_SUSTAIN_MS (W_SUSTAIN_QUIET_MS before the voice: the cold open's clip
+//    starts under the press's own work, up to 200 ms late, and has until 1.55 s to be put right before the laugh at
+//    2.02): one cue. A second on the same action waits W_COOL_MS; after W_MAX_FIX only an error past W_FAR, W_FAR_MS
+//    apart (a phone that cannot hold real time gets a still now and then, never the old freeze every second). Two lips
+//    clips on one timeline (the swap's two layers under the slider, T06) are cued together, never one without the other;
+//  - loose clips (ambient, loops, run-outs, a fallback lead-in until its cut, stack cards) are never moved while they
+//    play, but for a stall: one past LOOSE_SEEK (a stack card: W_CARD_FAR) for W_LOOSE_FAR_MS (a network stall left it
+//    there for good: the rate that used to close that is not written here) is cued once, W_LOOSE_GAP_MS at least after
+//    its last command. Never a loop: its wrap is the browser's seek, a still each time on the phone, not a drift, and an
+//    ambient loop has no right place to be put back to. A stack card held while out of sight is cued onto its timeline
+//    as the deck brings it back (it is still out of sight then), so it no longer comes back 0.3-1.2 s behind;
+//  - two timelines within W_ADOPT at a hand-over are one (T04's lead-in: 36 ms; a cue would cost a 0.37 s still);
+//  - a clip Safari refuses to play (Low Power Mode) is a still until the next press unlocks it: parked once on each new
+//    action's first frame (one paused seek), never stepped along its timeline (the phone showed that as a 2 frames-a-
+//    second slideshow for a minute); every press unlocks the clips on and next to the screen and, with evidence of Low
+//    Power Mode, the rest of the story's clips too (see wkFps, primeVideos, wkUnlock);
+//  - a jump (a seek while playing, the lock screen's scrub, the return from a hidden tab) takes every clip cold: its
+//    corrections and its start under measurement are forgotten with it.
+const W_BIAS = .03, W_START = .12, W_START_MIN = .03, W_START_MAX = .8, W_LAG_MAX = 1, W_SEEK = .25, W_ADOPT = .06;
+const W_LATE = .05, W_EARLY = .11, W_LATE_HOLD = .09, W_EARLY_HOLD = .185, W_QUIET = .1;
+const W_BLIND_MS = 400, W_SUSTAIN_MS = 500, W_COOL_MS = 2500, W_MAX_FIX = 2, W_FAR = .35, W_FAR_MS = 8000;
+const W_LATE_START = .04, W_GROUP_MS = 200;   // a start this much later than led is late; clips started within W_GROUP_MS started together
+const W_ARM = .2, W_SUSTAIN_QUIET_MS = 150;    // a parked clip's start timer is armed this long before it is due; the sustain before the voice
+const W_LOOSE_FAR_MS = 1000, W_LOOSE_GAP_MS = 4000; // a loose clip past LOOSE_SEEK this long, this long after its last command: one cue
+const W_CARD_FAR = .5, W_CARD_OFF = .1;  // a stack card's stall threshold; a card woken further off than this is cued onto its timeline
+const W_LAG_GATE_MS = 300;               // a start under measurement is read before a cue forgets it, once it is this old
+const W_EARLY_FIX = .125;                // a correction whose own start leaves the picture this far ahead gets one more cue
+// Priming (see primeVideos and wkUnlock). For one page load, to A/B on a phone: ?lpm=1 / ?lpm=0 (the Low Power Mode evidence
+// forced on / off), ?unlock=mix|src|pp (how the rest of the story's clips are unlocked under that evidence), ?prime=N (the
+// press's play()+pause() unlocks capped at N in all, the old build's set counted but always played in full), ?prime=all (every
+// one by play()+pause(), no per-file rule), ?prime=none (nothing beyond the old build's set: the Low Power Mode stills, on
+// purpose).
+const QS = new URLSearchParams(location.search), PRIMEQ = QS.get('prime'), LPMQ = QS.get('lpm'), UNLOCKQ = QS.get('unlock');
+const W_UNLOCK = UNLOCKQ === 'src' || UNLOCKQ === 'pp' || UNLOCKQ === 'mix' ? UNLOCKQ : 'mix'; // (the default until a phone shows whether 'src' works: see wkUnlock)
+const W_PRIME_AHEAD = 90; // (past this many s of the press, one element per media file is played)
+const W_PRIME_MAX = PRIMEQ === 'all' ? Infinity : PRIMEQ === 'none' ? 0 : PRIMEQ && Number.isFinite(+PRIMEQ) ? +PRIMEQ : W_UNLOCK === 'src' ? Infinity : 12; // (play()+pause() unlocks one press makes, refused ones aside)
+// rAF: a window of the last W_FPS_N intervals, W_FPS_MS past the page's load (+0.5 s); evidence from W_FPS_FULL intervals (a
+// press before that: from W_FPS_MIN); Low Power Mode: at least W_FPS_30 of them in 28-40 ms and under W_FPS_FAST under 22 ms
+const W_FPS_MS = 1200, W_FPS_N = 36, W_FPS_FULL = 15, W_FPS_MIN = 8, W_FPS_30 = .7, W_FPS_FAST = .1;
+// The start lead (start-up lag + W_BIAS), learned, and kept per device (localStorage) so that a second visit starts right.
+const wk = {start: W_START, lags: []}, WK_KEY = 'sg-play-wk', WK_VER = 2, W_KEEP = 2, W_KEEP_MS = 3 * 864e5;
+const wkMed = xs => { const o = [...xs].sort((x, y) => x - y), m = o.length >> 1; return o.length % 2 ? o[m] : (o[m - 1] + o[m]) / 2; };
+const wkStartOf = L => clamp(wkMed(L.length < 5 ? [W_START - W_BIAS, ...L] : L) + W_BIAS, W_START_MIN, W_START_MAX);
+// (an element whose own start was measured is aimed with its own lag, both ways: the correction that follows a slow start must
+// not be aimed with the lead the start just missed by, and a fast element is not held to a stale slow lead)
+const wkLeadOf = s => (s && s.lag != null ? clamp(s.lag + W_BIAS, W_START_MIN, W_START_MAX) : wk.start);
+function wkLoad() {
+  try {
+    const o = JSON.parse(localStorage.getItem(WK_KEY) || 'null'), age = o ? Date.now() - o.at : NaN;
+    if (!o || o.v !== WK_VER || !(age >= 0 && age < W_KEEP_MS) || !Array.isArray(o.lags)) return; // (another build's, or stale)
+    const L = o.lags.filter(x => Number.isFinite(x) && x > -.05 && x < W_LAG_MAX).slice(-W_KEEP);
+    if (L.length) { wk.lags = L; wk.start = wkStartOf(L); }
+  } catch {}
+}
+function wkSave() { try { localStorage.setItem(WK_KEY, JSON.stringify({v: WK_VER, lags: wk.lags.slice(-W_KEEP).map(x => +x.toFixed(4)), at: Date.now()})); } catch {} }
+const wkRunning = () => st.state === 'playing' && (st.tail ? st.tail.at != null : !audio.paused && st.audioLive);
+const wkAlone = s => { for (const o of st.vs.values()) if (o !== s && Math.abs((o.began || -1e9) - s.began) < W_GROUP_MS) return false; return true; };
+// (L: the lead a correction made now would be issued with, this element's own: it holds the picture until t + L + W_SEEK)
+const wkQuiet = (a, t, L) => a.onset != null && t + L + W_SEEK + W_QUIET < a.onset; // a correction made now ends before the voice
+const wkOut = (a, t, d, L) => (wkQuiet(a, t, L) ? d < -W_LATE || d > W_EARLY : d < -W_LATE_HOLD || d > W_EARLY_HOLD); // outside the band
+// (WK) The start under measurement (s.startAt): the clip's frame was s.startLead ahead of the story when play() was called and
+// is d ahead now, so play() took startLead - d to move it. Kept as this element's own lag (s.lag), and learned into wk.start
+// (median of the last 5, the default counted among them until there are 5) when the start was alone. True when it was read
+// (a start into data the element had, with a sane reading).
+function wkSample(s, d) {
+  const lag = s.startLead - d;
+  s.startAt = 0;
+  if (!s.startBuf || !(lag > -.05 && lag < W_LAG_MAX)) return false; // (a start that waited for the network, or a wild reading, says nothing)
+  s.lag = lag;
+  if (wkAlone(s)) { wk.lags.push(lag); if (wk.lags.length > 5) wk.lags.shift(); wk.start = wkStartOf(wk.lags); wkSave(); }
+  return true;
+}
+// (WK) Low Power Mode evidence, for the press (primeVideos): a clip refused since the last press (st.reprime), or rAF at a
+// steady 30 a second on the page as it loaded. WebKit throttles rAF to 30 in Low Power Mode (bug 168837): every interval is
+// then ~33 ms, none under 22, where a 60 or 120 Hz page that drops frames still has many (the phone in Low Power Mode: 30-31
+// frames a second, the longest 34 ms; out of it, 60 a second, and its slow seconds still mixed 17 ms frames in). WebKit adds
+// the Low Power Mode restriction to a <video> only when the element is created (HTMLMediaElement::initializeMediaSession:
+// here, as the page is parsed) and nothing adds it back, so the page's state as it loaded is what matters: rAF is timed from
+// the moment this module runs to W_FPS_MS past the page's 'load' + 0.5 s (a rolling window of the last W_FPS_N intervals; a
+// gap past 100 ms is the page busy, not its cadence), and that first complete sample is the evidence for good (Low Power
+// Mode switched on later restricts no clip already on the page; switched off, it lifts none). A press before it is complete
+// reads the window so far. A page that got no complete sample (hidden as it loaded) samples again on coming back to the tab
+// and after a pause. A hidden tab stops a sample, and a stale callback cannot end the next one (gen). ?lpm=1 / ?lpm=0 force it.
+const fps = {gen: 0, on: false, iv: [], ev: null};
+let loadAt = 0;
+function fpsOf(iv) {
+  const n = iv.length;
+  if (n < W_FPS_MIN) return null;
+  let s30 = 0, fast = 0;
+  for (const x of iv) { if (x < 22) fast++; else if (x >= 28 && x <= 40) s30++; }
+  return {n, med: wkMed(iv), s30: s30 / n, fast: fast / n, lpm: s30 / n >= W_FPS_30 && fast / n < W_FPS_FAST};
+}
+function wkFps() {
+  if (!WK || fps.on || fps.ev || document.hidden || st.state === 'playing' || st.state === 'loading') return;
+  const gen = ++fps.gen, t0 = performance.now(), iv = fps.iv = [];
+  let last = 0;
+  fps.on = true;
+  const f = now => {
+    if (gen !== fps.gen) return;
+    if (document.hidden || st.state === 'playing' || st.state === 'loading') { fps.on = false; fps.gen++; return; } // (a press reads what there is)
+    if (last && now - last < 100) { iv.push(now - last); if (iv.length > W_FPS_N) iv.shift(); }
+    last = now;
+    const end = loadAt ? Math.max(t0, loadAt + 500) + W_FPS_MS : Infinity;
+    if (now < end || (iv.length < W_FPS_FULL && now < end + 5000)) return void requestAnimationFrame(f);
+    fps.on = false; fps.gen++;
+    if (iv.length >= W_FPS_FULL) fps.ev = fpsOf(iv);
+  };
+  requestAnimationFrame(f);
+}
+const fpsNow = () => fps.ev || fpsOf(fps.iv); // the evidence, or the sample so far
+const wkLpm = () => LPMQ === '1' || (LPMQ !== '0' && (!!st.reprime || !!(fpsNow() || {}).lpm));
+if (WK) {
+  wkLoad();
+  if (document.readyState === 'complete') loadAt = performance.now(); else addEventListener('load', () => { loadAt = performance.now(); }, {once: true});
+  wkFps();
+  window.__sgWK = true; // (main.js: the swap's own sync loop stands down while this driver plays the layers)
+}
+const isCard = el => !!(el.parentElement && el.parentElement.parentElement && el.parentElement.parentElement.classList.contains('grid4'));
 const still = a => a.p.mode === 'park' || a.p.mode === 'hold';
 const tight = a => !!(a.p.tape || (a.p.sync === 'tape' && !a.fallback)); // on a tape's timeline: lips-grade sync
 // iPhone fixes, Sept 30. WebKit seeks exactly (currentTime, zero tolerance: AVFoundation decodes forward from the last
@@ -392,7 +583,7 @@ const tight = a => !!(a.p.tape || (a.p.sync === 'tape' && !a.fallback)); // on a
 // on. A paused loose clip within FAST_MAX of its timeline is simply started where it is, the rate closing the gap.
 // Tape clips and cuts keep their exact seeks (their windows were re-encoded with 0.5 s keyframes). Chrome: unchanged.
 const exactOnly = new WeakSet();
-const fastOK = (a, el) => WEBKIT && !tight(a) && typeof el.fastSeek === 'function' && !exactOnly.has(el);
+const fastOK = (a, el) => WEBKIT && !tight(a) && !a.lips && typeof el.fastSeek === 'function' && !exactOnly.has(el); // (a.lips: WK only)
 const boostMs = d => clamp(Math.abs(d) / BOOST_MAX * 1000 + 600, 1000, 3000);
 function catchUp(el, s, h, pt, d, base, now) { // started where it is; the boosted rate closes d
   s.seekAt = now; s.last = now; s.nudge = Math.abs(d) > LOOSE_OFF;
@@ -448,15 +639,15 @@ function driftOf(el, pt, a) {
   return d;
 }
 // Two actions on one element are one timeline at t when they give the same page time there (modulo a loop).
-function sameAt(a, b, t) {
+function sameAt(a, b, t, tol = SAME) {
   if (!a || !b || still(a) || still(b)) return false;
   const x = pageTime(a, t).pt, y = pageTime(b, t).pt, w = (b.p.mode === 'loop' && b.p.wrap) || (a.p.mode === 'loop' && a.p.wrap) || 0;
   let d = x - y;
   if (w > 0) d = ((d % w) + w * 1.5) % w - w / 2;
-  return Math.abs(d) < SAME;
+  return Math.abs(d) < tol;
 }
 function pitchFree(el, s) {
-  if (s.pf) return;
+  if (s.pf || WK) return; // (WK: no rate is ever written, so pitch preservation is left alone)
   s.pf = true;
   el.preservesPitch = false;
   if ('webkitPreservesPitch' in el) el.webkitPreservesPitch = false;
@@ -493,6 +684,82 @@ function seekPlaying(el, s, a, h, pt, base, exact = false) {
     if (Math.abs(d) > TAPE_SEEK) s.noSeekUntil = performance.now() + BACKOFF_MS; // landed off again: let the rate do it
   }, () => {});
 }
+// (WK) The one WebKit actuator: pause the clip, seek it PAUSED and exactly to the frame the story shows at cueT, then
+// play() L (the start lead: wk.start, or this element's own, see wkLeadOf) before cueT. Never a seek on a playing clip, never
+// a rate write. s.cue (the cue time) is set while one is pending: the loop leaves the clip alone until it has been told to
+// play. One whose seek has not landed after main.js's 5 s wait stays a still; the loop takes it up again once it lands. The
+// start is timed on the audio's own time (storyT), so the frame lands on what is heard. (For tests: the start is noted on
+// the cut's record, stats.cuts, when it is one.)
+function wkCue(el, s, a, h, cueT, base, again = 0, L = wk.start) {
+  const p0 = pageTime(a, cueT).pt;
+  if (s.pre) { clearTimeout(s.pre); s.pre = 0; }
+  s.seekAt = s.last = performance.now(); s.outAt = 0; s.startAt = 0; s.farAt = 0; s.cue = cueT;
+  countSeek(a);
+  return h.at(p0, {play: false, exact: true}).then(() => {
+    if (st.vs.get(el) !== s || s.cue !== cueT) return;
+    if (el.seeking) { s.cue = null; return; }
+    const go = () => {
+      s.pre = 0;
+      if (st.vs.get(el) !== s || s.cue !== cueT) return;
+      s.cue = null;
+      if (!wkRunning() || !el.paused) return; // (the audio stopped meanwhile: the loop parks it and starts it with the audio)
+      // (a lips clip whose start comes late is cued again, a little further on, twice at most; once its voice is heard, only
+      // past W_LATE_HOLD: a start up to that late lands inside the hold band, where a second cue would freeze it over the words)
+      const lead = cueT - storyT(), late = lead < L - (a.onset != null && cueT >= a.onset ? W_LATE_HOLD : W_LATE_START);
+      if (late && a.lips && again < 2) return void wkCue(el, s, a, h, storyT() + (L + W_SEEK) * base, base, again + 1, L);
+      s.seekAt = s.last = s.startAt = s.began = performance.now();
+      s.startLead = lead; s.startBuf = inBuf(el, el.currentTime) && lead >= L - W_LATE_START;
+      s.cueRec = {cue: cueT, started: +storyT().toFixed(4), lead: +lead.toFixed(4), again};
+      const rec = st.stats.cuts[a.id]; if (rec && rec.cue === cueT) Object.assign(rec, s.cueRec);
+      h.at(p0, {play: true, rate: base, tolerance: 1e9});
+    };
+    const wait = (cueT - storyT() - L) * 1000 / base;
+    if (wait < 4) go(); else s.pre = setTimeout(go, wait);
+  }, () => {});
+}
+// (WK) What the rate nudge and the 35 ms re-align are on WebKit. (1) The start lead is learned from each start (wkSample),
+// read W_BLIND_MS after it once the audio has run 600 ms, or, when a correction comes sooner (the cold open's first start
+// can be corrected 550 ms in), just before the correction (W_LAG_GATE_MS), which then aims with the lag it just showed
+// (wkLeadOf): a slow phone's first correction lands in band instead of as late as the start it corrects. When that lag was
+// a one-off (the first start under the press's load), the correction's own start is fast and its picture runs ahead by the
+// difference, inside the hold band: read W_LAG_GATE_MS after it, a correction past W_EARLY_FIX ahead is cued once more, at
+// once, with the lag it showed (voice or no voice, cool-down or not: a 0.3 s still against a picture 0.17 s early to the
+// cut). (2) A lips clip is watched against the band and re-cued, rarely (see the WebKit driver's rules above); the other lips
+// clips on its timeline (the swap's two layers) are cued with it, with the same cue, and each counts the fix.
+// d here is the clip's lead over the audio's own time (syncVideos: dA).
+function wkWatch(el, s, a, h, t, d, base, now) {
+  // (a correction's own start is read from W_LAG_GATE_MS, as the start a cue would forget is: the cold open's then ends its
+  // one extra still before the laugh)
+  const fx = s.fix, own = a.lips && !!fx && fx.a === a && !fx.more && s.began >= fx.at; // (this start was a correction's own)
+  if (s.startAt && now - s.startAt > (own ? W_LAG_GATE_MS : W_BLIND_MS) && now - (st.liveAt || 0) > 600) {
+    if (wkSample(s, d) && own && d > W_EARLY_FIX) return void wkFix(el, s, a, h, t, base, true);
+  }
+  if (!a.lips) return;
+  const L = wkLeadOf(s);
+  if (!wkOut(a, t, d, L) || now - s.seekAt < W_BLIND_MS) { s.outAt = 0; return; }
+  if (!s.outAt) { s.outAt = now; return; }
+  const quiet = wkQuiet(a, t, L), n = s.fix && s.fix.a === a ? s.fix.n : 0, far = n >= W_MAX_FIX;
+  if (now - s.outAt < (quiet ? W_SUSTAIN_QUIET_MS : W_SUSTAIN_MS)) return;
+  if (far ? (Math.abs(d) < W_FAR || now - s.seekAt < W_FAR_MS) : (n > 0 && !quiet && now - s.seekAt < W_COOL_MS)) return;
+  if (s.startAt && now - s.startAt > W_LAG_GATE_MS) wkSample(s, d); // (the start this cue would forget)
+  wkFix(el, s, a, h, t, base, false);
+}
+// (WK) A correction: the clip cued W_SEEK + its lead ahead (the lead read now: a sample just taken counts), with the other lips
+// clips on its timeline, unless its cut is about to re-cue it anyway, and never into data an element does not have. more: the
+// one extra cue after a correction that landed early (no second one on that action).
+function wkFix(el, s, a, h, t, base, more) {
+  const L = wkLeadOf(s), cueT = t + (L + W_SEEK) * base, nx = a.cutNext ? C.next.get(a) : null;
+  if (nx && nx.t0 - cueT < L + W_SEEK) return;          // its cut is about to re-cue it anyway
+  if (!inBuf(el, pageTime(a, cueT).pt)) return;        // never into data the element does not have
+  const at = performance.now();
+  const fix = (o, oa) => { const p = o.fix && o.fix.a === oa ? o.fix : null; o.fix = {a: oa, n: (p ? p.n : 0) + 1, at, more: more || !!(p && p.more)}; st.stats.fixes[oa.id] = (st.stats.fixes[oa.id] || 0) + 1; };
+  for (const [oel, os] of st.vs) {
+    if (oel === el || !os.a || !os.a.lips || os.cue != null || oel.paused || oel.seeking || !sameAt(os.a, a, t, W_ADOPT) || !inBuf(oel, pageTime(os.a, cueT).pt)) continue;
+    fix(os, os.a); wkCue(oel, os, os.a, SG().video(oel), cueT, base, 0, L);
+  }
+  fix(s, a);
+  wkCue(el, s, a, h, cueT, base, 0, L);
+}
 // Cuts: the next action on this element starts a different timeline (the lead-in's one correction on a tape's audio onset,
 // or the cold open's re-cue). The seek is issued ahead of the cue by what this element's seeks take, so the new picture
 // lands on the cue, and the clip plays on from there (no second seek when the next action takes over). Measured in
@@ -505,12 +772,20 @@ function seekPlaying(el, s, a, h, pt, base, exact = false) {
 // more than a frame late, a loose clip is not hard-seeked for 2 s and the rate (within 25 %) closes the gap.
 function planCut(el, s, a, h, t, base, frameDt) {
   const nx = C.next.get(a);
-  if (!nx || still(nx) || !nx.ok() || (s.cut && s.cut.nx === nx) || sameAt(a, nx, nx.t0)) return;
-  const est = cutEst(s);
+  if (!nx || still(nx) || !nx.ok() || (s.cut && s.cut.nx === nx) || sameAt(a, nx, nx.t0, WK ? W_ADOPT : SAME)) return;
+  const L = WK ? wkLeadOf(s) : 0, est = WK ? L + W_SEEK : cutEst(s);
   if (nx.t0 - t > est + frameDt + .004) return;
   const go = () => {
     if (s.cut) s.cut.timer = 0;
     if (st.vs.get(el) !== s || st.state !== 'playing' || audio.paused || !st.audioLive) { s.cut = null; return; }
+    if (WK) { // the cut as a cue: paused on the new timeline's first frame now, playing on the cue (fix 'held', as below)
+      const t0 = performance.now(), ta = audio.currentTime, buf = inBuf(el, pageTime(nx, nx.t0).pt);
+      wkCue(el, s, nx, h, nx.t0, base, 0, L).then(() => {
+        const tl = audio.currentTime; // (landed: the paused seek; started, lead, again: the start, from wkCue)
+        st.stats.cuts[nx.id] = {cue: nx.t0, issued: +ta.toFixed(4), landed: +tl.toFixed(4), took: +((performance.now() - t0) / 1000).toFixed(4), d: +driftOf(el, pageTime(nx, tl).pt, nx).toFixed(4), buf, fix: 'held', ...(s.cueRec && s.cueRec.cue === nx.t0 ? s.cueRec : {})};
+      });
+      return;
+    }
     const t0 = performance.now(), e = cutEst(s), ta = audio.currentTime;
     const at = Math.max(nx.t0, ta + e * base) + CUT_HOLD * base; // where the clock will be halfway through the post-seek hold
     const target = pageTime(nx, at).pt, buf = inBuf(el, target);
@@ -551,12 +826,18 @@ function planCut(el, s, a, h, t, base, frameDt) {
 function cancelPre() {
   for (const s of st.vs.values()) {
     if (s.pre) { clearTimeout(s.pre); s.pre = 0; }
+    s.cue = null;
     if (s.cut) { if (s.cut.timer) clearTimeout(s.cut.timer); s.cut = null; }
   }
 }
 // A clip parked on its frame; cold (a jump: every owned clip at once) on WebKit a loose one is moved with fastSeek, and
 // one that lands further than FAST_MAX off is parked exactly (and seeked exactly from then on).
+// (WK) A clip with its metadata but no frame (readyState 1) that already sits on the frame is parked 1 ms on: WebKit fetches
+// a paused clip's frames only for a seek, so a lookahead clip parked at 0 (the stack cards) came on with nothing to show
+// and started ~0.2 s behind (Simulator, Oct 1: three cards 'waiting' at their play()), where one parked by a real seek
+// started on time. The same frame, off screen, the data fetched a few seconds early: what the lookahead is for.
 function park(el, s, a, h, pt, fast) {
+  if (WK && el.readyState === 1 && !el.seeking && Math.abs(el.currentTime - pt) < 1e-3) return void h.at(pt + 1e-3, {play: false, exact: true});
   if (!fast) return void h.at(pt, {play: false});
   h.at(pt, {play: false, fast: true}).then(() => {
     if (st.vs.get(el) !== s || s.a !== a || Math.abs(driftOf(el, pt, a)) <= FAST_MAX) return;
@@ -587,20 +868,28 @@ function syncVideos(t, now, {cold = false, hold = false} = {}) {
   const halted = !st.audioWanted || (tail ? tail.at == null : audio.paused || audio.seeking);
   const stalled = halted || (!clockLive && !starting), tapeStalled = halted || !clockLive;
   const base = audio.playbackRate || 1, frameDt = st.frameDt || FRAME;
+  // (WK) how far the frame clock t holds ahead of the audio's own time (clock() holds a backward step, up to HOLD_FAR; one
+  // frame of extrapolation is not a hold): the lips are judged against the audio, dA = d + ckHold
+  const ckHold = WK && !tail ? Math.max(0, t - audioT() - FRAME) : 0;
   for (const [el, {a, live}] of want) {
     let s = st.vs.get(el);
     // a new action on the same timeline (lead-in -> tape -> run-out), or the one a cut already moved it onto, carries on
-    const carried = !!s && s.a !== a && live && ((s.cut && s.cut.nx === a) || sameAt(s.a, a, t));
+    const carried = !!s && s.a !== a && live && ((s.cut && s.cut.nx === a) || sameAt(s.a, a, t, WK ? W_ADOPT : SAME));
     const fresh = cold || !s || (s.a !== a && !carried);
     if (!s) st.vs.set(el, s = {a, last: -1e9, seekAt: -1e9, nudge: false});
+    // (WK, taken cold or on a new timeline: a pending cue, its corrections so far and a start under measurement are over)
+    if (WK && fresh) { s.free = false; s.fix = null; s.outAt = 0; s.startAt = 0; s.farAt = 0; if (s.cue != null) { s.cue = null; if (s.pre) { clearTimeout(s.pre); s.pre = 0; } } }
     if (s.a !== a && s.cut && s.cut.nx !== a) { if (s.cut.timer) clearTimeout(s.cut.timer); s.cut = null; }
     if (s.cut && s.cut.nx === a && live) s.cut = null;
     s.a = a;
     const h = sg.video(el);
-    const tt = tight(a);
+    const tt = tight(a), wl = WK && (tt || a.lips); // (WK) on a tape's timeline, or a lips lead-in that is not (T04's)
     let {pt, play} = pageTime(a, live ? t : a.t0);
-    if (!live || hold || (tt ? tapeStalled : stalled)) play = false;
+    if (!live || hold || (tt || wl ? tapeStalled : stalled)) play = false;
     if (!play) {
+      // (WK) a pending cue: on a clip still to come on (a late start, cued again), left to it; the audio stopped under it:
+      // dropped, the clip is parked, and started with the audio
+      if (WK && s.cue != null) { if (!live && !hold && !stalled) continue; s.cue = null; if (s.pre) { clearTimeout(s.pre); s.pre = 0; } }
       // A fallback lead-in taken ahead (off screen): the element first fetches its cut target (seeked there, paused), then
       // parks on the lead-in's first frame, so the cut on the audio onset is a seek into data it already has.
       if (!live && a.prefetch) {
@@ -617,25 +906,41 @@ function syncVideos(t, now, {cold = false, hold = false} = {}) {
       // started a moment early, so it is moving on the cue
       // (checked a frame ahead, and timed to PRESTART before the cue wherever the frame tick falls)
       const nx = live ? (still(a) ? C.next.get(a) : null) : a;
-      if (!hold && !stalled && clockLive && nx && !still(nx) && nx.t0 - t <= PRESTART + frameDt && Math.abs(pageTime(nx, nx.t0).pt - pt) < .03) {
+      const pre = WK ? wkLeadOf(s) : PRESTART; // (WK: what play() takes there, learned, this element's own once measured; see the WebKit driver)
+      if (!hold && !stalled && clockLive && nx && !still(nx) && nx.t0 - t <= pre + (WK ? W_ARM : frameDt) && Math.abs(pageTime(nx, nx.t0).pt - pt) < .03) {
         if (el.paused && !s.pre) {
           pitchFree(el, s);
           const go = () => {
             s.pre = 0;
-            if (st.vs.get(el) !== s || st.state !== 'playing' || audio.paused || !el.paused) return;
-            s.seekAt = performance.now(); h.at(pt, {play: true, rate: base, tolerance: .03});
+            // (WK: nor one with no metadata yet: main.js would seek it once the metadata lands, by then playing; it starts once live)
+            if (st.vs.get(el) !== s || st.state !== 'playing' || audio.paused || !el.paused || (WK && (!wkRunning() || el.readyState < 1))) return;
+            s.seekAt = performance.now();
+            if (WK) {
+              const lead = nx.t0 - storyT(), late = lead < pre - W_LATE_START;
+              if (late && nx.lips) return void wkCue(el, s, nx, h, storyT() + (pre + W_SEEK) * base, base, 1, pre); // (a lips clip is not started late: cued)
+              s.startAt = s.began = s.seekAt; s.startLead = lead; s.startBuf = inBuf(el, el.currentTime) && !late;
+            }
+            // (WK: started where it is parked, never seeked in the same task as its play(): that would hold the picture
+            // until the seek lands. A lips clip was parked exactly; a loose one within FAST_MAX, and starts where it is)
+            h.at(pt, {play: true, rate: base, tolerance: WK ? 1e9 : .03});
           };
-          const wait = (nx.t0 - t - PRESTART) * 1000 / base;
+          const wait = (nx.t0 - t - pre) * 1000 / base;
           if (wait < 4) go(); else s.pre = setTimeout(go, wait);
         }
         continue;
       }
-      if (fresh || !el.paused || now - s.last >= 250) { s.last = now; s.nudge = false; if (el.playbackRate !== 1) el.playbackRate = 1; park(el, s, a, h, pt, cold && fastOK(a, el)); }
+      // (WK: a lips clip held while the audio waits sits its start lead ahead of the story, so the play() it gets on the audio's
+      // 'playing' lands it on the mix)
+      if (fresh || !el.paused || now - s.last >= 250) { s.last = now; s.nudge = false; if (el.playbackRate !== 1) el.playbackRate = 1; park(el, s, a, h, pt + (WK && live && a.lips ? wkLeadOf(s) * base : 0), cold && fastOK(a, el)); }
       continue;
     }
     // (phones) a stack card out of sight: held where it is (see unseenCard)
+    // (WK: and free from then on: when the deck brings it back, GRID_WAKE before it shows, it is cued onto its timeline while
+    // still out of sight (one paused seek: held 0.3-1.2 s, it came back that far behind for the rest of its window), or, if
+    // that frame is not in data it has, plays on from where it stopped)
     if (touchy() && unseenCard(el, t)) {
       if (!el.paused) { s.last = now; s.nudge = false; h.at(el.currentTime, {play: false}); }
+      if (WK) { s.free = true; s.startAt = 0; }
       continue;
     }
     // A clip whose timeline has reached its file's end (mode play: the laugh reprise in the tail, which runs to its last
@@ -650,14 +955,22 @@ function syncVideos(t, now, {cold = false, hold = false} = {}) {
     // A clip the browser would not play without a tap (iOS Low Power Mode, an in-app browser; main.js marks the refusal,
     // __sgBlocked): held on its timeline, re-parked at most every BLOCKED_MS, not told to play on every frame; the next
     // press plays it inside the gesture (primeVideos) and it goes on from there.
+    // (WK: a refused clip is a still, parked once on each new action's first frame and never stepped along its timeline:
+    // stepped twice a second it was a slideshow, a minute of it on the phone. Oct 1)
     if (el.paused && el.__sgBlocked) {
       st.reprime = true;
-      if (now - s.last >= BLOCKED_MS) { s.last = now; s.nudge = false; h.at(pt, {play: false}); }
+      if (WK && srcOnly.has(el)) st.srcFails = true; // (a src set did not unlock it: see wkUnlock)
+      if (WK ? fresh : now - s.last >= BLOCKED_MS) { s.last = now; s.nudge = false; h.at(pt, {play: false}); }
       continue;
     }
-    if (s.cut && !s.cut.timer) continue; // a cut has been seeked onto the next timeline: that action takes over on its cue
+    if ((s.cut && !s.cut.timer) || s.cue != null) continue; // a cut has been seeked onto the next timeline: that action takes over on its cue (WK: or a cue is pending)
+    // (WK) a clip with no metadata yet is held on its frame, not started: told to play, main.js would play it at once and seek
+    // it once its metadata lands, a seek on a playing clip
+    if (WK && el.paused && el.readyState < 1) { if (fresh || now - s.last >= 250) { s.last = now; s.nudge = false; h.at(pt, {play: false}); } continue; }
     pitchFree(el, s);
-    const d = driftOf(el, pt, a), hard = tt ? TAPE_SEEK : LOOSE_SEEK;
+    // (WK: a lips clip waiting paused is parked its start lead ahead, see above; raw is how far ahead of the story its frame is;
+    // dA: d against the audio's own time, what the lips are judged by)
+    const raw = driftOf(el, pt, a), d = raw - (WK && el.paused && a.lips ? wkLeadOf(s) * base : 0), dA = d + ckHold, hard = tt ? TAPE_SEEK : LOOSE_SEEK;
     // (the browser's own loop: a clip sits on its last frame ~50 ms, then holds its first ~40 ms, so it comes out of the wrap
     // about 0.1 s behind; no seek for that, the rate closes it: no seek or nudge during the wrap, the harder nudge for 0.5 s)
     const wrapping = a.p.mode === 'loop' && !fresh && !el.paused && (el.currentTime > (el.duration || a.p.wrap) - .08 || el.currentTime < .04);
@@ -668,17 +981,41 @@ function syncVideos(t, now, {cold = false, hold = false} = {}) {
     // plays on from what it has instead (the rate closing what it can), and the seek comes once its own read-ahead covers
     // the target (measured at 9 Mbps / 170 ms: the 'everywhere' grid froze 1-2.5 s at a time, over and over, before this).
     const starved = !tt && !fresh && !el.paused && Math.abs(d) > hard && !inBuf(el, pt + (s.lead ?? LEAD) * base);
-    if (fresh || el.paused || (Math.abs(d) > hard && !backoff && !wrapping && !starved)) {
+    if (fresh || el.paused || (!WK && Math.abs(d) > hard && !backoff && !wrapping && !starved)) {
       // let the last seek land first (and a clip told to play that is still paused, its play() refused or not yet taken:
       // not told again on every frame; one the player parked itself is started at once)
       if (!fresh && (el.paused ? s.seekAt >= s.last && now - s.seekAt < 250 : now - s.seekAt < 400)) continue;
-      if (Math.abs(d) > (fresh || el.paused ? (tt ? .04 : LOOSE_ON) : hard)) {
+      if (WK && s.free && !fresh) { // a stack card comes back (see unseenCard)
+        const L = wkLeadOf(s), cueT = t + (L + W_SEEK) * base;
+        if (Math.abs(d) > W_CARD_OFF && inBuf(el, pageTime(a, cueT).pt)) { s.free = false; s.began = now; wkCue(el, s, a, h, cueT, base, 0, L); continue; }
+        s.seekAt = now; s.last = now; s.began = now; h.at(el.currentTime, {play: true, rate: base, tolerance: 1e9}); continue;
+      }
+      // (WK, a clip on a tape's timeline: a lips clip, paused (waiting for the audio: where it would land, dA, outside its
+      // band) or playing and taken cold outside its band; a run-out paused past .04 of its frame or playing past FAST_MAX:
+      // cued, not seeked while it plays. A loose clip past FAST_MAX, paused or playing, is cued too (a fast seek lands on a
+      // keyframe seconds away in the loose files); within it, it starts where it is, no seek)
+      const off = wl ? (a.lips ? wkOut(a, t, dA) : Math.abs(d) > (el.paused ? .04 : FAST_MAX))
+        : Math.abs(d) > (fresh || el.paused ? (tt ? .04 : LOOSE_ON) : hard);
+      if (off) {
+        if (WK) { s.startAt = 0; if (!wl) s.began = now; const L = wkLeadOf(s); if (wl || Math.abs(d) > FAST_MAX) wkCue(el, s, a, h, t + (L + W_SEEK) * base, base, 0, L); else catchUp(el, s, h, pt, d, base, now); continue; }
         if ((fresh || el.paused) && Math.abs(d) <= FAST_MAX && fastOK(a, el)) { catchUp(el, s, h, pt, d, base, now); continue; }
         seekPlaying(el, s, a, h, pt, base); continue;
       }
       s.seekAt = now; s.last = now; s.nudge = false;
+      if (WK) { s.startAt = clockLive && el.paused ? now : 0; if (el.paused) s.began = now; s.startLead = raw + ckHold; s.startBuf = inBuf(el, el.currentTime); } // (a start to learn the lead from)
       h.at(pt, {play: true, rate: base, tolerance: 1e9});
       continue;
+    }
+    // (WK) a loose clip that has fallen past LOOSE_SEEK (a stack card: W_CARD_FAR) and stayed there (a network stall; no rate
+    // here to close it): one cue into data it has, W_LOOSE_GAP_MS at least after its last command. Not a loop (ambient, and
+    // the browser's own wrap is a seek WebKit makes on a playing clip, ~0.3 s on the phone, each time: not a drift to correct),
+    // not a stack card playing on from where it stopped (s.free), not a lead-in whose cut is about to re-cue it.
+    if (WK && !wl && !s.free && !wrapping && a.p.mode !== 'loop') {
+      if (Math.abs(d) > (isCard(el) ? W_CARD_FAR : LOOSE_SEEK)) { if (!s.farAt) s.farAt = now; } else s.farAt = 0;
+      if (s.farAt && now - s.farAt > W_LOOSE_FAR_MS && now - s.seekAt > W_LOOSE_GAP_MS) {
+        const L = wkLeadOf(s), cueT = t + (L + W_SEEK) * base, nx = a.cutNext ? C.next.get(a) : null;
+        if (!(nx && nx.t0 - cueT < L + W_SEEK) && inBuf(el, pageTime(a, cueT).pt)) { st.stats.fixes[a.id] = (st.stats.fixes[a.id] || 0) + 1; wkCue(el, s, a, h, cueT, base, 0, L); continue; }
+      }
     }
     // an on-screen clip that will cut to a range it does not play through: that range warmed WARM_AHEAD s ahead (once the
     // audio is running, so it never competes with the mix's own start), even when the element fetched it itself earlier:
@@ -695,9 +1032,10 @@ function syncVideos(t, now, {cold = false, hold = false} = {}) {
     }
     planCut(el, s, a, h, t, base, frameDt);
     if (!clockLive || (s.cut && !s.cut.timer) || wrapping) continue; // (a cut just issued: nothing to nudge on the old timeline)
-    const ad = Math.abs(d);
+    const ad = Math.abs(WK ? dA : d);
     let r = base;
-    if (tt) {
+    if (WK) wkWatch(el, s, a, h, t, dA, base, now); // (WK: no rate, no seek on a playing clip; a lips clip is watched, and re-cued rarely)
+    else if (tt) {
       const boost = backoff || now - Math.max(s.seekAt, st.liveAt || 0) < BOOST_MS;
       if (!backoff && ad > TAPE_ALIGN && st.ck.moved && now - st.liveAt > 250 && now - s.seekAt > 1000) { seekPlaying(el, s, a, h, pt, base); continue; }
       if (!s.nudge && ad > TAPE_ON) s.nudge = true; else if (s.nudge && ad < TAPE_OFF) s.nudge = false;
@@ -709,10 +1047,10 @@ function syncVideos(t, now, {cold = false, hold = false} = {}) {
       const g = boost ? BOOST_GAIN : LOOSE_GAIN, cap = boost ? BOOST_MAX : LOOSE_MAX;
       if (s.nudge) r = Math.round(base * (1 - clamp(d * g, -cap, cap)) * 200) / 200;
     }
-    if (r !== el.playbackRate) el.playbackRate = r;
+    if (!WK && r !== el.playbackRate) el.playbackRate = r;
     // (counted once the start-up alignment has had its chance: 0.6 s after the audio is seen moving)
     if (now - s.seekAt > 300 && now - st.liveAt > 600) {
-      const bump = (o, id) => { const k = o[id] || (o[id] = {n: 0, sum: 0, max: 0, at: 0, over: 0}); k.n++; k.sum += ad; if (ad > k.max) { k.max = ad; k.at = +t.toFixed(3); } if (ad > 1 / 30) k.over++; };
+      const bump = (o, id) => { const k = o[id] || (o[id] = {n: 0, sum: 0, max: 0, at: 0, over: 0}); k.n++; k.sum += ad; if (WK) k.sd = (k.sd || 0) + dA; if (ad > k.max) { k.max = ad; k.at = +t.toFixed(3); } if (ad > 1 / 30) k.over++; };
       if (a.p.tape) bump(st.stats.tape, a.id);
       bump(st.stats.clips, a.id);
     }
@@ -1065,10 +1403,15 @@ function leavePlay(touch = false) {
   for (const [el, s] of st.vs) unrate(el, s);
   st.vs.clear();
   captionsBack(); // every caption track as it was before Play
-  if (touch) snapHold(true, {touch: true, between}); else if (between) snapHold(true);
+  // WebKit brings snapping back to the point where the reader's LAST finger scroll ended, not the nearest one (iPhone,
+  // Sept 30: a pause on a one-screen card, by a tap or the pill, threw the page back to the cold open or the cover after
+  // a swipe made before Play). So on WebKit every pause keeps the hold until the reader's own next scroll input; a pan
+  // that paused the story is that input (it ended where the finger left the page), so the lift path stays.
+  if (touch) snapHold(true, {touch: true, between: between || WEBKIT}); else if (between || WEBKIT) snapHold(true);
   const sg = SG();
   if (sg && sg.mode() === 'play') sg.mode('reader'); // every owned video, reveal and flag back to the page, snap and sound too
   root.style.overflowAnchor = '';
+  if (WK) setTimeout(wkFps, 500); // (WK: the next press's Low Power Mode evidence, if the page has none yet, measured at rest)
 }
 // A cold start at t: every component set to its state at t (the choreography's state contract), the videos parked on
 // their frames, the scroll move in progress picked up where the story has it.
@@ -1192,28 +1535,116 @@ function finish() {
 // at once, ahead of the mix. So: the clips the track owns from t to t + PRIME_AHEAD (which the lookahead would load a few
 // seconds later anyway), those on or next to the screen (a first press before the track has arrived), and any clip that
 // was refused since the last press (held meanwhile, see syncVideos). A clip refused later is primed by the next press.
+// (WK, iPhone stutter fix, Oct 1) On the phone, in Low Power Mode, only the clips primed inside a press ever played: from
+// 36 s to 97 s of the story every clip on screen was refused and stood still (re-parked twice a second, a slideshow) until
+// the next press. So on WK every press primes what the build always primed (a clip refused since the last press first:
+// the story needs it now), and, with evidence of Low Power Mode (wkLpm: a refusal seen, or rAF at a steady 30 a second on
+// the page as it loaded, see wkFps), unlocks every other clip the story still needs (wkUnlock). Without that evidence nothing
+// more: the first press on a phone that is not in Low Power Mode costs what it always did (0.1-5 MB), not the 39-69 MB a
+// blanket prime asked for.
 const PRIME_AHEAD = 20;
 const primed = new WeakSet();
+// (WK) Clips 'unlocked' by a src set alone. If one of them is refused anyway (st.srcFails: on this phone a src set does not
+// lift the Low Power Mode restriction), none of them counts as primed any more: the next press plays them, as 'pp' would.
+const srcOnly = new WeakSet();
+const isPrimed = v => primed.has(v) && !(st.srcFails && srcOnly.has(v));
+const srcOf = v => v.currentSrc || v.querySelector('source')?.src || v.src || '';
 function primeAudio() { try { const p = audio.play(); audio.pause(); p?.catch(() => {}); } catch {} }
 function primeVideos(t) {
+  const lpm = WK && wkLpm(); // (WK: read before the refusal flag below is cleared: a refusal is evidence)
   st.reprime = false;
-  const els = new Set();
-  if (C && t != null) for (const a of C.videos) if (a.ok() && a.t1 > t && a.t0 < t + PRIME_AHEAD) { const el = elOf(a); if (el) els.add(el); }
+  const els = [], seen = new Set(), add = v => { if (v && !seen.has(v)) { seen.add(v); els.push(v); } }; // (in priority order)
+  if (WK) for (const v of document.querySelectorAll('video')) if (v.__sgBlocked) add(v);
+  if (C && t != null) { for (const a of C.videos) if (a.ok() && a.t1 > t && a.t0 < t + PRIME_AHEAD) add(elOf(a)); }
   for (const v of document.querySelectorAll('video')) {
-    if (v.__sgBlocked) { els.add(v); continue; }
+    if (v.__sgBlocked) { add(v); continue; }
     const r = v.getBoundingClientRect();
-    if (r.bottom > -innerHeight && r.top < 2 * innerHeight && r.width) els.add(v);
+    if (r.bottom > -innerHeight && r.top < 2 * innerHeight && r.width) add(v);
   }
+  st.primed = {played: 0, of: els.length, track: !!(C && t != null)}; // (for tests: what this press primed)
+  if (WK) { const f = fpsNow(); Object.assign(st.primed, {lpm, fps: f ? +f.med.toFixed(1) : 0, fps30: f ? +f.s30.toFixed(2) : 0, fpsFast: f ? +f.fast.toFixed(2) : 0, fpsN: f ? f.n : 0, fpsDone: !!fps.ev, unlock: lpm ? W_UNLOCK : null, srcFails: !!st.srcFails, unlocked: 0, whole: 0, src: 0}); }
+  let n = 0; const played = []; // (WK: the clips this press plays, refused ones aside; and every one it plays, for wkUnlock's per-file rule)
   for (const v of els) {
-    if ((primed.has(v) && !v.__sgBlocked) || !v.paused || v.ended) continue; // (play() would rewind an ended one)
-    primed.add(v);
-    delete v.__sgBlocked;
-    v.muted = true;
-    try {
-      const p = v.play();
-      v.pause();
-      p?.catch(e => { if (e && e.name === 'NotAllowedError') { v.__sgBlocked = performance.now(); primed.delete(v); } });
-    } catch {}
+    if (WK && v.__sgBlocked && !v.paused) { delete v.__sgBlocked; primed.add(v); srcOnly.delete(v); continue; } // (played in a gesture since: unlocked)
+    if ((isPrimed(v) && !v.__sgBlocked) || !v.paused || v.ended) continue; // (play() would rewind an ended one)
+    st.primed.played++;
+    if (!v.__sgBlocked) n++;
+    played.push(v);
+    unlockOne(v, 'pp');
+  }
+  if (lpm) wkUnlock(t, played, n);
+}
+// One element, inside the press. 'pp': play() and pause() at once, muted. 'src' (WK, see wkUnlock): the element's own URL set
+// as its src attribute, which runs the media element load algorithm (prepareForLoad, which in a gesture lifts the
+// restriction) without preparing the element to play, so its preload attribute still holds and a preload=none element
+// fetches nothing. (play() prepares it to play, and from then on WebKit's effective preload for it is 'auto' for good,
+// HTMLMediaElement::effectivePreloadValue: the whole file. An explicit load() lifts the restriction too, but load() also
+// prepares to play: the whole file again, 185 MB for 25 elements in the 5 s after a press in the Simulator.)
+function unlockOne(v, how) {
+  primed.add(v);
+  delete v.__sgBlocked;
+  v.muted = true;
+  try {
+    if (how === 'src') { srcOnly.add(v); const u = srcOf(v); if (u) v.setAttribute('src', u); return; }
+    srcOnly.delete(v);
+    const p = v.play();
+    v.pause();
+    p?.catch(e => { if (e && e.name === 'NotAllowedError') { v.__sgBlocked = performance.now(); primed.delete(v); } });
+  } catch {}
+}
+// (WK) With Low Power Mode evidence, every other page video the story still needs is unlocked in the press too. WebKit adds
+// the Low Power Mode restriction to a <video> when the element is created with the mode on, and lifts it for good on an
+// element whose play() runs in a gesture, or whose media element load algorithm does (prepareForLoad(): load(), or a src
+// attribute set); nothing adds it back (HTMLMediaElement.cpp). In story order: the track's clips from t on, or, before the
+// track has arrived (a first press: its fetch begins with the tap's pointerdown, the click comes ~100 ms later), the page's
+// videos in document order from the first on or below the top of the screen (the page is in story order). Left alone: one
+// unlocked already, and one main.js's unlockSound played inside a tap (dataset.primed: unlocked, and already fetching).
+// How (W_UNLOCK, ?unlock=):
+//  - 'mix', the default until a phone in Low Power Mode shows whether a src set unlocks. First play()+pause() ('pp': proven,
+//    and a whole-file fetch each) on at most W_PRIME_MAX clips in all, the old build's set above included (12: the phone took
+//    a batch of 10 in 113 ms, the Simulator 12 never-loaded ones with a worst frame of 270 ms, inside the old press's own
+//    204-406 ms; the one larger batch on the phone, 26 played unmuted by main.js's unlockSound on a tap, was followed by a
+//    2.8 s frame), one element per media file (a later copy of a file this press fetches waits: with the track, a copy first
+//    needed past W_PRIME_AHEAD s of t; without it, any later copy in the page: the story never needs two copies of one file
+//    within 119 s of each other). Then a src set (no fetch, see unlockOne) on every other clip the story still needs that was
+//    never played or positioned (srcSafe). From the cover: pp on the first reel and T03 (to 212.7 s), a src set on all the
+//    rest. If a src set lifts the restriction on the phone, one press plays every clip; if it does not, the clips past the cap
+//    are stills until the next press, exactly as with 'pp' alone (the src set changes nothing else on such a clip): the first
+//    refusal of a src-only clip sets st.srcFails, and from then on those clips count as unprimed and every press is 'pp'.
+//  - 'src': a src set on every clip that was never played or positioned, pp on the others (already loading or loaded:
+//    nothing more to fetch), no cap. It rests on the same WebKit path as the phone test's 'load' row (prepareForLoad in a
+//    gesture): if that row plays on a phone in Low Power Mode while the control is refused, this is the method to ship (one
+//    constant, W_UNLOCK).
+//  - 'pp': pp only, capped and one per file as in 'mix', no src set (the previous build's method, for A/B).
+// In every method a clip that already holds its whole file (a preload=metadata copy a fast link filled at load) is played and
+// paused, outside the cap: nothing to fetch, where a src set would throw the file away.
+// srcSafe: never positioned or played (data-begun: main.js's data-start and video manager, the player's own seeks; a seek on a
+// preload<auto element prepares it to play), not unlocked by main.js, not asked to load whole (preload none or metadata).
+// WebKit's effective preload for it is then still its attribute, so a src set fetches only that again: nothing, or the
+// metadata. On a clip that was played or positioned it would drop the buffer, put it back to 0 (one begun in reader mode
+// would start over from 0, its data-start applied only once) and, since WebKit's effective preload stays 'auto' once an
+// element was prepared to play, fetch the whole file again.
+const srcSafe = v => !v.dataset.begun && !v.dataset.primed && v.preload !== 'auto';
+const holdsAll = v => { const b = v.buffered; return v.readyState >= 3 && b.length > 0 && b.end(b.length - 1) >= v.duration - .5; };
+function wkUnlock(t, played, n) {
+  if (PRIMEQ === 'none') return;
+  const srcOK = W_UNLOCK !== 'pp' && !st.srcFails; // (src sets failed on this device: from here on, 'pp')
+  let left = (W_UNLOCK === 'src' && st.srcFails && PRIMEQ == null ? 12 : W_PRIME_MAX) - n; // (pp: the press's own plays count)
+  const list = [], first = new Map(), perFile = PRIMEQ !== 'all', files = new Set(played.map(srcOf));
+  if (C && t != null) {
+    for (const a of C.videos) { if (!a.ok() || a.t1 <= t) continue; const el = elOf(a); if (el && !first.has(el)) { first.set(el, a.t0); list.push(el); } }
+  } else {
+    let on = false;
+    for (const v of document.querySelectorAll('video')) { const r = v.getBoundingClientRect(); if (!on && r.bottom > 0 && r.width) on = true; if (on) list.push(v); }
+  }
+  for (const v of list) {
+    if (isPrimed(v) || !v.paused || v.ended || v.error) continue;
+    if (v.dataset.primed === '1' && !v.__sgBlocked) { primed.add(v); continue; } // (unlockSound's play() in a tap)
+    if (holdsAll(v)) { st.primed.whole++; unlockOne(v, 'pp'); continue; }
+    const f = srcOf(v), safe = srcSafe(v);
+    const pp = W_UNLOCK === 'src' && srcOK ? !safe : !(perFile && files.has(f) && (!first.has(v) || first.get(v) >= t + W_PRIME_AHEAD));
+    if (pp && left > 0) { left--; files.add(f); st.primed.unlocked++; unlockOne(v, 'pp'); }
+    else if (safe && srcOK) { st.primed.src++; unlockOne(v, 'src'); }
   }
 }
 // The Play control. Every path that can start the audio does it inside this press. (ev: the control's own click, a
@@ -1289,7 +1720,12 @@ function interact(e) {
 }
 for (const type of ['wheel', 'touchstart', 'touchmove', 'pointerdown', 'click', 'keydown']) addEventListener(type, interact, {capture: true, passive: true});
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) { if (st.state === 'playing' || st.state === 'loading') pause('hidden'); return; }
+  if (document.hidden) {
+    if (WK && fps.on) { fps.on = false; fps.gen++; } // (WK: a rAF sample stops with the page hidden; its stale callback is ignored)
+    if (st.state === 'playing' || st.state === 'loading') pause('hidden');
+    return;
+  }
+  if (WK) wkFps(); // (WK: a page that has no complete rAF sample yet, hidden as it loaded, samples now; not while the story plays)
   // Back from the lock screen with the story still playing (resumed from the media controls): the page catches up.
   if (st.state === 'playing' && st.phase === 'run') {
     const t = storyT();
@@ -1398,7 +1834,7 @@ if (btn && audio) {
     get t() { return storyT(); }, // the story's time: the audio's, and past its end the tail's
     state: () => ({state: st.state, phase: st.phase, t: storyT(), tail: !!st.tail, pausedAt: st.pausedAt, glide: !!st.glide, lastY: st.lastY, scrollY,
       target: C && st.state === 'playing' ? restOf(st.mv || {}) : null, move: st.mv ? st.mv.a.id : null, owned: [...st.vs.keys()].map(v => (v.currentSrc || '').split('/').pop()),
-      audio: {paused: audio.paused, rate: audio.playbackRate, live: st.audioLive}, stats: st.stats, env: {touch: touchy(), webkit: WEBKIT}, clock: st.ck.last}),
+      audio: {paused: audio.paused, rate: audio.playbackRate, live: st.audioLive}, stats: st.stats, env: {touch: touchy(), webkit: WEBKIT, wkPhone: WK_PHONE, wk: WK, prime: [W_PRIME_AHEAD, W_PRIME_MAX], unlock: W_UNLOCK, primed: st.primed || null, wkStart: +wk.start.toFixed(3), wkLags: wk.lags.map(x => +x.toFixed(3)), fps: +((fpsNow() || {}).med || 0).toFixed(1), fpsDone: !!fps.ev, lpm: WK && wkLpm()}, clock: st.ck.last}),
     seek: t => seekTo(Number(t)),
     rest: () => (C && st.mv ? restOf(st.mv) : null),
     storyY: t => { if (!C) return null; const m = lastMove(t); if (!m) return 0; const y1 = restOf(m); if (t >= m.t1) return y1; const y0 = restBefore(m); return y0 + (y1 - y0) * m.e((t - m.t0) / (m.t1 - m.t0)); },
